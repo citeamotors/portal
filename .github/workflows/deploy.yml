@@ -1,0 +1,38 @@
+name: Deploy portal
+
+# Publishes the Citea Motors team portal to GitHub Pages.
+# The portal file lives in Supabase storage (bucket "deploy", path portal/index.html).
+# Run it from the Actions tab ("Run workflow") after a new version is uploaded.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download portal
+        run: |
+          mkdir -p site
+          curl -fsSL "https://asobgojrhatjpazgwnjp.supabase.co/storage/v1/object/public/deploy/portal/index.html" -o site/index.html
+          grep -q "Citea" site/index.html
+          sha256sum site/index.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4
