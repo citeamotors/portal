@@ -31,7 +31,7 @@ jobs:
             grep -q "Citea" "site/$f"
           done
           if [ -f CNAME ]; then cp CNAME site/CNAME; fi
-          sha256sum site/*
+          sha256sum site/*.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
