@@ -83,8 +83,9 @@ p{margin:0 0 14px}
 .count{margin-left:auto;font-size:13px;color:var(--steel)}
 
 /* vehicle page */
-.vgrid{display:grid;grid-template-columns:1.35fr 1fr;gap:40px;align-items:start}
-@media (max-width:920px){.vgrid{grid-template-columns:1fr;gap:24px}}
+.vgrid{display:grid;grid-template-columns:1.35fr 1fr;grid-template-areas:"gal head" "desc head";gap:28px 40px;align-items:start}
+.vgrid>.gal{grid-area:gal}.vgrid>.vhead{grid-area:head}.vgrid>.desc{grid-area:desc}
+@media (max-width:920px){.vgrid{grid-template-columns:1fr;grid-template-areas:"gal" "head" "desc";gap:24px}}
 .gal .main{position:relative;aspect-ratio:4/3;background:var(--paper);overflow:hidden;touch-action:pan-y;cursor:zoom-in}
 .gal .main img{width:100%;height:100%;object-fit:cover}
 .gal .nav{position:absolute;top:50%;transform:translateY(-50%);width:46px;height:46px;border:0;background:rgba(0,0,0,.6);color:#fff;font-size:22px;cursor:pointer}
