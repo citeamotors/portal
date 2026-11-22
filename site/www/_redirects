@@ -1,0 +1,18 @@
+# Old Carsforsale addresses -> new pages (used once the site moves to Cloudflare Pages)
+/cars-for-sale        /cars          301
+/Inventory/*          /cars          301
+/inventory/*          /cars          301
+/coupe-for-sale       /cars          301
+/sedan-for-sale       /cars          301
+/suv-for-sale         /cars          301
+/wagon-for-sale       /cars          301
+/pickup-for-sale      /cars          301
+/subaru-for-sale      /cars          301
+/ford-for-sale        /cars          301
+/honda-for-sale       /cars          301
+/mitsubishi-for-sale  /cars          301
+/porsche-for-sale     /cars          301
+/about-us             /about         301
+/schedule-service     /auto-repair#book  301
+/terms-and-conditions /terms         301
+/sitemap              /sitemap.xml   301

@@ -608,6 +608,15 @@
   .jtabs button{flex:1;background:none;border:0;border-bottom:3px solid transparent;margin-bottom:-1px;padding:10px 6px;font:inherit;font-size:13px;font-weight:600;letter-spacing:.04em;color:var(--steel,#686868);cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap}
   .jtabs button span{font-family:var(--mono);font-size:11px;background:var(--sub);color:var(--ink);padding:1px 7px}
   .jtabs button.on{color:var(--ink);border-bottom-color:var(--red)}.jtabs button.on span{background:var(--ink);color:#fff}
+  .lst-row{display:flex;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--hairline);flex-wrap:wrap}.lst-ph{width:96px;height:72px;background:var(--sub) center/cover;flex:none}
+  .lphotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}.lp{position:relative;aspect-ratio:4/3;background:var(--sub) center/cover}.lp span{position:absolute;left:0;top:0;background:#111;color:#fff;font-size:11px;padding:2px 6px}
+  .lp div{position:absolute;right:0;bottom:0;display:flex}.lp div button{width:30px;height:30px;border:0;background:rgba(0,0,0,.7);color:#fff;cursor:pointer;font-size:15px}
+  label.lp.add{display:flex;align-items:center;justify-content:center;border:1px dashed var(--ink);cursor:pointer;font-weight:600;font-size:13px;text-transform:none;letter-spacing:0;margin:0;background:none;color:var(--ink)}
+  .lead{border-top:1px solid var(--hairline);padding:14px 0}.lead.new{border-left:4px solid var(--red);padding-left:12px}.lead-x{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:13px;color:var(--steel,#686868)}
+  .btn.danger{color:var(--red);border-color:var(--red)}
+  .modal.wide{max-width:720px}
+  label.chk{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;font-weight:500;color:var(--ink);text-transform:none;letter-spacing:0;margin-top:14px;cursor:pointer}label.chk input{width:auto;margin:2px 0 0;flex:none}
+  .count.red{background:var(--red);color:#fff}
   .modal{width:100%;max-width:480px;background:var(--surface);border-top:6px solid var(--ink);padding:22px;max-height:90vh;overflow:auto}
   .modal h2{font-size:18px;font-weight:600}
   .modal .row.end{justify-content:flex-end;margin-top:20px}
@@ -1741,12 +1750,14 @@
     timesheets:'<rect x="3" y="4" width="18" height="17"/><path d="M3 9h18M8 2v4M16 2v4M7 13h4M7 17h7"/>',
     clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     jobs:'<path d="M9 5h11M9 12h11M9 19h11"/><path d="M3.5 5l1.5 1.5L7.5 4M3.5 12l1.5 1.5 2.5-2.5M3.5 19l1.5 1.5 2.5-2.5"/>',
+    forsale:'<path d="M5 16l1.5-5h11l1.5 5"/><rect x="3" y="16" width="18" height="3"/><path d="M7 19v2M17 19v2"/><path d="M14 3h6v6l-6 6-6-6z" opacity=".0"/>',
+    leads:'<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>',
     training:'<rect x="3" y="5" width="18" height="13"/><path d="M10 9v5l4-2.5z"/><path d="M8 21h8"/>',
     team:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.2 4.1-6.5 8-6.5s7 2.3 8 6.5"/>',
     earnings:'<rect x="2" y="6" width="20" height="13"/><circle cx="12" cy="12.5" r="3"/><path d="M6 9.5v6M18 9.5v6"/>'
   };
-  const SHORT_TITLES = {wip:"In Progress"};
-  const TITLES = {settings:"Settings",wip:"Work in Progress",calendar:"Calendar",board:"Tech Board",customers:"Customers",inventory:"Inventory",timesheets:"Timesheets",reports:"Reports",clock:"Time Clock",jobs:"My Jobs",training:"Training",team:"Team",earnings:"Earnings"};
+  const SHORT_TITLES = {wip:"In Progress",forsale:"For Sale",leads:"Leads"};
+  const TITLES = {settings:"Settings",wip:"Work in Progress",calendar:"Calendar",board:"Tech Board",customers:"Customers",inventory:"Inventory",timesheets:"Timesheets",reports:"Reports",clock:"Time Clock",jobs:"My Jobs",training:"Training",forsale:"Cars for Sale",leads:"Website Leads",team:"Team",earnings:"Earnings"};
   let chromeTick=null;
 
   const roleLabel=u=>{ const r=roleOfU(u); return r?r.name:u.dbRole==="owner"?"Owner":u.dbRole==="gm"?"Manager":"Technician"; };
@@ -1759,10 +1770,10 @@
     $("#whoInit").textContent=(me.name||"?").slice(0,1).toUpperCase();
     const mgr = me.role==="manager";
     const groups = (mgr
-      ? [["Shop",["wip","calendar","board","customers","inventory","reports"]],["Team",["timesheets","clock","training","team",...(me.finance?["earnings"]:[])]]]
+      ? [["Shop",["wip","calendar","board","customers","inventory","reports"]],["Website",["forsale","leads"]],["Team",["timesheets","clock","training","team",...(me.finance?["earnings"]:[])]]]
       : [["My day",["jobs","clock","training"]]]).map(([g,keys])=>[g,keys.filter(k=>k==="timesheets"||k==="earnings"||canPage(k))]).filter(([g,keys])=>keys.length);
     $("#tabs").innerHTML = groups.map(([g,keys])=>`<div class="sect">${g}</div>`+keys.map(k=>
-      `<button data-tab="${k}"><svg viewBox="0 0 24 24">${ICONS[k]}</svg><span>${TITLES[k]}</span>${k==="wip"?'<span class="count" id="wipCount"></span>':""}</button>`).join("")).join("");
+      `<button data-tab="${k}"><svg viewBox="0 0 24 24">${ICONS[k]}</svg><span>${TITLES[k]}</span>${k==="leads"?'<span class="count red hidden" id="leadCount"></span>':""}${k==="wip"?'<span class="count" id="wipCount"></span>':""}</button>`).join("")).join("");
     $("#tabs").onclick = e=>{ const b=e.target.closest("button"); if(b){ if(b.dataset.tab==="team") viewTeam.open=null; show(b.dataset.tab); $("#app").classList.remove("nav-open"); } };
     $("#menuBtn").onclick = ()=>$("#app").classList.toggle("nav-open");
     $("#app").classList.remove("nav-open"); document.querySelector(".topbar").classList.remove("search-open");
@@ -1776,6 +1787,7 @@
     $("#searchBtn").classList.toggle("hidden", false);
     $("#searchBtn").onclick = ()=>{ const tb=document.querySelector(".topbar"); tb.classList.toggle("search-open"); if(tb.classList.contains("search-open")) $("#gq").focus(); };
     bindSearch();
+    web={cars:null,leads:null}; if(me.role==="manager"){ loadWeb().catch(()=>{}); clearInterval(window.__leadT); window.__leadT=setInterval(()=>{ if(document.visibilityState==="visible"&&tab!=="leads") fetchAll("leads","id,status,created_at").then(ls=>{ if(web.leads){ const known=new Set(web.leads.map(x=>x.id)); if(ls.some(x=>!known.has(x.id))){ web.leads=null; loadWeb(); } } }).catch(()=>{}); },120000); }
     clearInterval(chromeTick); chromeTick=setInterval(updateChrome,30000);
     const wm=(location.hash||"").match(/^#ws=(.+)$/), qm=(location.hash||"").match(/^#qbo=(\w+)/);
     const sqr=mgr?sqReadReturn():null;
@@ -1804,7 +1816,7 @@
     document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.tab===t));
     $("#pageTitle").textContent = (innerWidth<=480&&SHORT_TITLES[t])||TITLES[t]||"";
     document.querySelector(".topbar").classList.remove("search-open");
-    ({clock:viewClock,jobs:viewJobs,training:viewTraining,board:viewBoard,timesheets:viewTimesheets,team:viewTeam,earnings:viewEarnings,wip:viewWip,customers:viewCustomers,inventory:viewInventory,reports:viewReports,calendar:viewCalendar,settings:viewSettings})[t]();
+    ({clock:viewClock,jobs:viewJobs,training:viewTraining,forsale:viewForSale,leads:viewLeads,board:viewBoard,timesheets:viewTimesheets,team:viewTeam,earnings:viewEarnings,wip:viewWip,customers:viewCustomers,inventory:viewInventory,reports:viewReports,calendar:viewCalendar,settings:viewSettings})[t]();
     updateChrome(); window.scrollTo(0,0);
   }
 
@@ -2310,6 +2322,108 @@
         const del=q("#mDel");
         if(del) del.onclick=()=>{ db.jobs=db.jobs.filter(x=>x.id!==j.id); save(); closeModal(); after(); toast("Job deleted"); };
       });
+  }
+
+  /* ---------- website: cars for sale (citeamotors.com) and website leads ---------- */
+  let web={cars:null,leads:null};
+  const LISTING_BUCKET="listing-photos";
+  const LST=[["draft","Draft (hidden)"],["for_sale","For sale"],["pending","Sale pending"],["sold","Sold (hidden)"]];
+  const lstName=c=>[c.year,c.make,c.model].filter(Boolean).join(" ")||"New car";
+  async function loadWeb(){
+    const [cars,leads]=await Promise.all([fetchAll("listings").catch(()=>[]),fetchAll("leads").catch(()=>[])]);
+    web.cars=cars.sort((a,b)=>(a.sort-b.sort)||String(b.created_at).localeCompare(String(a.created_at)));
+    web.leads=leads.sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
+    leadCount();
+  }
+  function leadCount(){ const c=$("#leadCount"); if(!c||!web.leads) return; const n=web.leads.filter(l=>l.status==="new").length; c.textContent=n||""; c.classList.toggle("hidden",!n); }
+  function viewForSale(){
+    if(!web.cars){ $("#view").innerHTML='<div class="card"><div class="empty">Loading\u2026</div></div>'; loadWeb().then(()=>{ if(tab==="forsale") viewForSale(); }); return; }
+    const f=viewForSale.f||"live", list=web.cars.filter(c=>f==="all"||(f==="live"?["for_sale","pending"].includes(c.status):c.status===f));
+    const pill=s=>s==="for_sale"?'<span class="pill green">For sale</span>':s==="pending"?'<span class="pill">Sale pending</span>':s==="sold"?'<span class="pill">Sold</span>':'<span class="pill red">Draft</span>';
+    const n=k=>web.cars.filter(c=>k==="live"?["for_sale","pending"].includes(c.status):c.status===k).length;
+    $("#view").innerHTML=`<div class="card"><div class="row" style="margin-bottom:10px;gap:8px;flex-wrap:wrap"><h2 style="margin:0">Cars for sale</h2><span class="spacer"></span><a class="btn ghost sm" href="https://teams.citeamotors.com/www/cars.html" target="_blank" rel="noopener">View website</a><button class="btn sm" id="lstAdd" type="button">+ Add a car</button></div>
+      <div class="jtabs">${[["live","On the website"],["draft","Drafts"],["sold","Sold"],["all","All"]].map(([k,l])=>`<button type="button" class="${k===f?"on":""}" data-lf="${k}">${l}<span>${k==="all"?web.cars.length:n(k)}</span></button>`).join("")}</div>
+      ${list.length?`<div class="lst">${list.map(c=>`<div class="lst-row"><div class="lst-ph" style="background-image:url('${esc((c.photos||[])[0]||"")}')"></div><div style="flex:1;min-width:0"><b>${esc(lstName(c))}</b> <span class="muted">${esc(c.trim||"")}</span><div class="muted" style="font-size:12.5px;margin-top:2px"><span class="mono">${c.price?"$"+Number(c.price).toLocaleString():"No price"}</span> \u00b7 <span class="mono">${c.miles?Number(c.miles).toLocaleString()+" mi":"No miles"}</span> \u00b7 ${(c.photos||[]).length} photo${(c.photos||[]).length===1?"":"s"}${c.vin?` \u00b7 <span class="mono">${esc(c.vin)}</span>`:""}</div></div>${pill(c.status)}<button class="btn ghost sm" type="button" data-led="${esc(c.id)}">Edit</button></div>`).join("")}</div>`:'<div class="empty">No cars here.</div>'}
+      <div class="hint">Cars marked For sale or Sale pending show on citeamotors.com right away. Drafts and sold cars are hidden.</div></div>`;
+    $("#view").querySelectorAll("[data-lf]").forEach(b=>b.onclick=()=>{ viewForSale.f=b.dataset.lf; viewForSale(); });
+    $("#lstAdd").onclick=()=>listingModal(null);
+    $("#view").querySelectorAll("[data-led]").forEach(b=>b.onclick=()=>listingModal(web.cars.find(c=>c.id===b.dataset.led)));
+  }
+  function listingModal(c0){
+    const isNew=!c0, c=JSON.parse(JSON.stringify(c0||{status:"draft",photos:[],description:"",featured:false,sort:0}));
+    c.photos=c.photos||[];
+    const F=[["year","Year","numeric"],["make","Make"],["model","Model"],["trim","Trim"],["body","Body","",["","Sedan","Coupe","Hatchback","Wagon","SUV","Pickup","Van","Convertible"]],["price","Price ($)","numeric"],["miles","Mileage","numeric"],["vin","VIN"],["stock","Stock #"],["engine","Engine"],["transmission","Transmission"],["drivetrain","Drivetrain","",["","All Wheel Drive","Four Wheel Drive","Front Wheel Drive","Rear Wheel Drive"]],["ext_color","Exterior color"],["int_color","Interior color"],["fuel","Fuel","",["","Gasoline","Electric","Hybrid","Diesel","Flex Fuel"]],["mpg","MPG / range"]];
+    const fld=([k,l,im,opts])=>`<div><label>${l}</label>${opts?`<select data-lk="${k}">${opts.map(o=>`<option value="${esc(o)}" ${String(c[k]||"")===o?"selected":""}>${o||"Select"}</option>`).join("")}${c[k]&&!opts.includes(c[k])?`<option selected>${esc(c[k])}</option>`:""}</select>`:`<input data-lk="${k}" ${im?`inputmode="${im}"`:""} value="${esc(c[k]==null?"":c[k])}" ${k==="vin"?'maxlength="17" class="mono" style="text-transform:uppercase"':""}>`}</div>`;
+    const draw=()=>{
+      modal(`<h2>${isNew?"Add a car for sale":"Edit "+esc(lstName(c))}</h2>
+        <div class="two"><div><label>Show on website</label><select data-lk="status">${LST.map(([k,l])=>`<option value="${k}" ${c.status===k?"selected":""}>${l}</option>`).join("")}</select></div><div><label>&nbsp;</label><label class="chk" style="margin:8px 0 0"><input type="checkbox" data-lk="featured" ${c.featured?"checked":""}><span>Feature on the home page</span></label></div></div>
+        <div class="row" style="gap:8px;margin-top:10px"><button class="btn ghost sm" type="button" id="lVin">Fill in from VIN</button><span class="muted" id="lVinMsg" style="font-size:12.5px"></span></div>
+        ${F.reduce((a,x,i)=>a+(i%2?"":'<div class="two">')+fld(x)+(i%2||i===F.length-1?"</div>":""),"")}
+        <label>Description</label><textarea data-lk="description" rows="8" placeholder="Condition, history, modifications, what's been done to it...">${esc(c.description||"")}</textarea><div class="hint">Use - at the start of a line for a bullet, **bold** for bold.</div>
+        <label style="margin-top:14px">Photos (first one is the main photo)</label>
+        <div class="lphotos">${c.photos.map((u,i)=>`<div class="lp" style="background-image:url('${esc(u)}')"><span>${i+1}</span><div><button type="button" data-pm="${i}|-1" aria-label="Move left">\u2039</button><button type="button" data-pm="${i}|1" aria-label="Move right">\u203a</button><button type="button" data-pd="${i}" aria-label="Remove">\u00d7</button></div></div>`).join("")}
+          <label class="lp add">+ Add photos<input type="file" id="lAdd" accept="image/*" multiple hidden></label></div>
+        <div class="row end">${isNew?"":`<button class="btn ghost danger" type="button" id="lDel">Delete</button><span class="spacer"></span>`}<button class="btn ghost" data-close type="button">Cancel</button><button class="btn" type="button" id="lSave">Save</button></div>`, root=>{
+        root.classList.add("wide");
+        const grab=()=>{ root.querySelectorAll("[data-lk]").forEach(i=>{ const k=i.dataset.lk; c[k]=i.type==="checkbox"?i.checked:i.value; }); };
+        root.querySelectorAll("[data-pm]").forEach(b=>b.onclick=()=>{ grab(); const [i,d]=b.dataset.pm.split("|").map(Number), j=i+d; if(j<0||j>=c.photos.length) return; [c.photos[i],c.photos[j]]=[c.photos[j],c.photos[i]]; draw(); });
+        root.querySelectorAll("[data-pd]").forEach(b=>b.onclick=()=>{ grab(); c.photos.splice(+b.dataset.pd,1); draw(); });
+        root.querySelector("#lAdd").onchange=async e=>{ grab(); const fs=[...e.target.files]; const lab=root.querySelector(".lp.add");
+          try{ for(let i=0;i<fs.length;i++){ lab.firstChild.textContent=`Uploading ${i+1}/${fs.length}\u2026`;
+              const blob=await dataUrlToBlob(await shrinkImage(fs[i],1600,0.82)), path=`${c.id||"new"}/${uid()}.jpg`;
+              const {error}=await sb.storage.from(LISTING_BUCKET).upload(path,blob,{contentType:"image/jpeg",cacheControl:"31536000"}); if(error) throw error;
+              c.photos.push(sb.storage.from(LISTING_BUCKET).getPublicUrl(path).data.publicUrl); }
+            draw(); }catch(err){ toast("Upload failed: "+(err.message||err)); draw(); } };
+        root.querySelector("#lVin").onclick=async()=>{ grab(); const v=String(c.vin||"").trim().toUpperCase(), m=root.querySelector("#lVinMsg");
+          if(v.length!==17){ m.textContent="Type the 17-character VIN first."; return; } m.textContent="Looking up\u2026";
+          try{ const r=await (await fetch(`https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${v}?format=json`)).json(), x=(r.Results||[])[0]||{};
+            const cap=s=>String(s||"").toLowerCase().replace(/\b\w/g,ch=>ch.toUpperCase());
+            const set=(k,val)=>{ if(val&&!String(c[k]||"").trim()) c[k]=val; };
+            set("year",x.ModelYear); set("make",cap(x.Make)); set("model",x.Model); set("trim",x.Trim);
+            const L=x.DisplacementL?Number(x.DisplacementL).toFixed(1)+"L":"", cyl=x.EngineCylinders?(x.EngineConfiguration&&/V/.test(x.EngineConfiguration)?"V":x.EngineConfiguration&&/Horizontal|Flat|Boxer/i.test(x.EngineConfiguration)?"H":"I")+x.EngineCylinders:"";
+            set("engine",[L,cyl,x.FuelTypePrimary,x.EngineHP?x.EngineHP+"hp":""].filter(Boolean).join(" "));
+            const dt=String(x.DriveType||""); set("drivetrain",/AWD|All/i.test(dt)?"All Wheel Drive":/4WD|4x4/i.test(dt)?"Four Wheel Drive":/FWD|Front/i.test(dt)?"Front Wheel Drive":/RWD|Rear/i.test(dt)?"Rear Wheel Drive":"");
+            const bc=String(x.BodyClass||""); set("body",/Pickup/i.test(bc)?"Pickup":/Sport Utility|SUV|Crossover/i.test(bc)?"SUV":/Coupe/i.test(bc)?"Coupe":/Wagon/i.test(bc)?"Wagon":/Hatchback/i.test(bc)?"Hatchback":/Convertible/i.test(bc)?"Convertible":/Van/i.test(bc)?"Van":/Sedan/i.test(bc)?"Sedan":"");
+            set("fuel",/Electric/i.test(x.FuelTypePrimary)?"Electric":/Gasoline/i.test(x.FuelTypePrimary)?"Gasoline":/Diesel/i.test(x.FuelTypePrimary)?"Diesel":"");
+            draw(); toast(x.Make?"Filled in from VIN":"VIN not found"); }catch(err){ m.textContent="Couldn't look it up. Fill it in by hand."; } };
+        const del=root.querySelector("#lDel"); if(del) del.onclick=async()=>{ if(!confirm(`Delete ${lstName(c)} from the website and the portal? To keep a record, set it to Sold instead.`)) return;
+          const {error}=await sb.from("listings").delete().eq("id",c.id); if(error){ toast("Not deleted: "+error.message); return; }
+          web.cars=web.cars.filter(x=>x.id!==c.id); closeModal(); toast("Deleted"); viewForSale(); };
+        root.querySelector("#lSave").onclick=async()=>{ grab();
+          if(!String(c.make||"").trim()||!String(c.model||"").trim()){ toast("Add at least the make and model"); return; }
+          if(["for_sale","pending"].includes(c.status)&&!c.photos.length&&!confirm("This car has no photos. Show it on the website anyway?")) return;
+          const num=v=>{ const n=parseInt(String(v||"").replace(/[^\d]/g,""),10); return isNaN(n)?null:n; };
+          const row={status:c.status,featured:!!c.featured,year:num(c.year),price:num(c.price),miles:num(c.miles),description:c.description||"",photos:c.photos,updated_at:new Date().toISOString(),
+            ...Object.fromEntries(["make","model","trim","body","vin","stock","engine","transmission","drivetrain","ext_color","int_color","fuel","mpg"].map(k=>[k,String(c[k]||"").trim()||null]))};
+          if(row.vin) row.vin=row.vin.toUpperCase();
+          if(c.status==="sold"&&(!c0||c0.status!=="sold")) row.sold_at=new Date().toISOString();
+          const q=isNew?sb.from("listings").insert({...row,sort:-Math.floor(Date.now()/1000)}).select().single():sb.from("listings").update(row).eq("id",c.id).select().single();
+          const {data,error}=await q; if(error){ toast("Not saved: "+error.message); return; }
+          if(isNew) web.cars.unshift(data); else web.cars=web.cars.map(x=>x.id===data.id?data:x);
+          closeModal(); toast(["for_sale","pending"].includes(data.status)?"Saved. It's on the website.":"Saved"); viewForSale(); };
+      });
+    };
+    draw();
+  }
+  const LEAD_KIND={contact:"Message",availability:"Car question",trade:"Sell / trade",service:"Service request",test_drive:"Test drive"};
+  function viewLeads(){
+    if(!web.leads){ $("#view").innerHTML='<div class="card"><div class="empty">Loading\u2026</div></div>'; loadWeb().then(()=>{ if(tab==="leads") viewLeads(); }); return; }
+    const f=viewLeads.f||"new", list=web.leads.filter(l=>f==="all"||l.status===f);
+    const when=t=>{ const d=new Date(t); return d.toLocaleDateString([],{month:"short",day:"numeric"})+" "+d.toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}); };
+    const skip=new Set(["page","vehicle"]);
+    $("#view").innerHTML=`<div class="card"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">Website leads</h2><span class="spacer"></span><button class="btn ghost sm" id="ldRef" type="button">Refresh</button></div>
+      <div class="jtabs">${[["new","New"],["done","Done"],["all","All"]].map(([k,l])=>`<button type="button" class="${k===f?"on":""}" data-ldf="${k}">${l}<span>${k==="all"?web.leads.length:web.leads.filter(x=>x.status===k).length}</span></button>`).join("")}</div>
+      ${list.length?list.map(l=>{ const d=l.data||{}, car=l.listing_id&&(web.cars||[]).find(c=>c.id===l.listing_id), ph=String(l.phone||"").replace(/[^\d+]/g,"");
+        const extra=Object.entries(d).filter(([k,v])=>!skip.has(k)&&v).map(([k,v])=>`<span><b>${esc(k.replace(/_/g," "))}:</b> ${esc(v)}</span>`).join("");
+        return `<div class="lead ${l.status==="new"?"new":""}"><div class="row" style="gap:8px;flex-wrap:wrap"><span class="pill ${l.status==="new"?"red":""}">${esc(LEAD_KIND[l.kind]||l.kind)}</span><b>${esc(l.name||"")}</b><span class="spacer"></span><span class="muted" style="font-size:12.5px">${esc(when(l.created_at))}</span></div>
+          ${d.vehicle||car?`<div style="margin-top:6px;font-size:13.5px">About: <b>${esc(d.vehicle||lstName(car))}</b></div>`:""}
+          ${l.message?`<p style="margin:8px 0;white-space:pre-wrap">${esc(l.message)}</p>`:""}${extra?`<div class="lead-x">${extra}</div>`:""}
+          <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px">${ph?`<a class="btn sm" href="tel:${esc(ph)}">Call ${esc(l.phone)}</a><a class="btn ghost sm" href="sms:${esc(ph)}">Text</a>`:""}${l.email?`<a class="btn ghost sm" href="mailto:${esc(l.email)}">${esc(l.email)}</a>`:""}<span class="spacer"></span><button class="btn ghost sm" type="button" data-ldone="${l.id}">${l.status==="new"?"\u2713 Mark done":"Reopen"}</button></div></div>`; }).join(""):`<div class="empty">${f==="new"?"No new leads. Messages from citeamotors.com show up here.":"Nothing here."}</div>`}</div>`;
+    $("#view").querySelectorAll("[data-ldf]").forEach(b=>b.onclick=()=>{ viewLeads.f=b.dataset.ldf; viewLeads(); });
+    $("#ldRef").onclick=()=>{ web.leads=null; viewLeads(); };
+    $("#view").querySelectorAll("[data-ldone]").forEach(b=>b.onclick=async()=>{ const l=web.leads.find(x=>String(x.id)===b.dataset.ldone), st=l.status==="new"?"done":"new";
+      const {error}=await sb.from("leads").update({status:st,handled_by:st==="done"?me.id:null,handled_at:st==="done"?new Date().toISOString():null}).eq("id",l.id);
+      if(error){ toast("Not saved: "+error.message); return; } l.status=st; leadCount(); viewLeads(); });
   }
 
   /* ---------- training ---------- */
