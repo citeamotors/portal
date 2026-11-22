@@ -617,6 +617,22 @@
   .modal.wide{max-width:720px}
   label.chk{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;font-weight:500;color:var(--ink);text-transform:none;letter-spacing:0;margin-top:14px;cursor:pointer}label.chk input{width:auto;margin:2px 0 0;flex:none}
   .count.red{background:var(--red);color:#fff}
+  .cb-board{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px;align-items:flex-start}.cb-col{flex:0 0 230px;background:var(--sub);padding:8px;min-height:120px}
+  .cb-col h3{display:flex;justify-content:space-between;font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin:2px 2px 8px}.cb-col h3 span{font-family:var(--mono)}
+  .cb-card{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;background:var(--card,#fff);border:1px solid var(--hairline);padding:10px;margin-bottom:8px;cursor:pointer;font:inherit;color:inherit}
+  .cb-card:hover{border-color:var(--ink)}.cb-card.hold{border-left:5px solid var(--red)}.cb-card.big{padding:14px}.cb-none{color:var(--steel,#888);text-align:center;padding:8px}
+  .cb-av{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;background:var(--ink);color:#fff;font-size:10px;font-weight:600}
+  .cb-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}.cb-list .cb-card{margin:0}
+  .cb-steps{display:flex;gap:2px;overflow-x:auto;margin-top:14px}.cb-steps button{flex:1 0 auto;border:0;background:var(--sub);padding:8px 10px;font:600 11.5px Montserrat,Arial;color:var(--steel,#686868);cursor:pointer;white-space:nowrap}
+  .cb-steps button.done{background:var(--ink);color:#fff;opacity:.55}.cb-steps button.on{background:var(--red);color:#fff}
+  .cb-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px;margin-top:10px}.cb-grid h3{margin:0 0 6px}
+  .cb-impact{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:4px 10px;margin-bottom:6px}.cb-impact label,.cb-checks label{display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-weight:500;font-size:13.5px;margin:0;color:var(--ink)}
+  .cb-impact input,.cb-checks input{width:auto;margin:0}.cb-checks{display:grid;gap:2px}.cb-checks label{padding:12px;border:1px solid var(--hairline);font-size:14.5px}.cb-checks input{width:20px;height:20px}
+  .cb-est td{padding:4px}.cb-est input,.cb-est select{padding:7px 6px;font-size:13px}.cb-supp td{background:rgba(200,32,31,.05)}
+  .cb-tot{margin:14px 0 0 auto;max-width:380px}.cb-tot div{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--hairline);font-size:13.5px}.cb-tot .big{border-top:2px solid var(--ink);font-size:16px}
+  .cb-warn{background:var(--red-tint,#fbeaea);border-left:6px solid var(--red);padding:10px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.cb-note{background:var(--sub);padding:10px 12px;margin-top:10px;font-size:14px}
+  .cb-ph{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px}.cb-ph button{aspect-ratio:4/3;border:0;background:var(--sub) center/cover;cursor:zoom-in}
+  .cb-ev{padding:6px 0;border-bottom:1px solid var(--hairline);font-size:13px;color:var(--ink)}.cb-ev .mono{color:var(--steel,#686868);font-size:12px;margin-right:6px}
   .modal{width:100%;max-width:480px;background:var(--surface);border-top:6px solid var(--ink);padding:22px;max-height:90vh;overflow:auto}
   .modal h2{font-size:18px;font-weight:600}
   .modal .row.end{justify-content:flex-end;margin-top:20px}
@@ -1147,7 +1163,8 @@
   // shop work: "repair" techs do the mechanical work orders; "body" techs are kept for the body shop side
   const shopWork=u=>{ const v=permsOf(u).cars; return v==null?(u.dbRole==="tech"?"repair":""):v===true?"repair":v||""; };
   const worksOnCars=u=>shopWork(u)==="repair";
-  const SHOP_WORK=[["","Doesn't work on cars"],["repair","Repair tech (mechanical work orders)"],["body","Body tech (body shop, coming later)"]];
+  const homeTab=()=>me&&shopWork(me)==="body"?"bodyjobs":"jobs";
+  const SHOP_WORK=[["","Doesn't work on cars"],["repair","Repair tech (mechanical work orders)"],["body","Body tech (collision jobs)"]];
   const shopWorkOfRole=r=>{ const v=(r.perms||{}).cars; return v==null?(r.access==="tech"?"repair":""):v===true?"repair":v||""; };
   // owners can do everything; anyone else: anything not switched off
   const can=k=>!!me&&(me.dbRole==="owner"||permsOf(me)[k]!==false);
@@ -1738,7 +1755,7 @@
   })();
   document.querySelector(".side-user").addEventListener("click", e=>{ if(e.target.closest("#logoutBtn")) return; $("#app").classList.remove("nav-open"); show("settings"); });
   $("#logoutBtn").addEventListener("click", logout);
-  document.querySelector(".side-logo img").addEventListener("click", ()=>{ if(!me) return; $("#app").classList.remove("nav-open"); show(me.role==="manager"?"wip":"jobs"); });
+  document.querySelector(".side-logo img").addEventListener("click", ()=>{ if(!me) return; $("#app").classList.remove("nav-open"); show(me.role==="manager"?"wip":homeTab()); });
 
   const ICONS = {
     wip:'<path d="M3 4h5v16H3zM10 4h5v10h-5zM17 4h4v13h-4z"/>',
@@ -1752,12 +1769,14 @@
     jobs:'<path d="M9 5h11M9 12h11M9 19h11"/><path d="M3.5 5l1.5 1.5L7.5 4M3.5 12l1.5 1.5 2.5-2.5M3.5 19l1.5 1.5 2.5-2.5"/>',
     forsale:'<path d="M5 16l1.5-5h11l1.5 5"/><rect x="3" y="16" width="18" height="3"/><path d="M7 19v2M17 19v2"/><path d="M14 3h6v6l-6 6-6-6z" opacity=".0"/>',
     leads:'<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>',
+    collision:'<rect x="3" y="4" width="5" height="16"/><rect x="10" y="4" width="5" height="11"/><rect x="17" y="4" width="4" height="7"/>',
+    bodyjobs:'<path d="M4 15l2-5h12l2 5"/><rect x="3" y="15" width="18" height="4"/><path d="M9 6l3-3 3 3"/>',
     training:'<rect x="3" y="5" width="18" height="13"/><path d="M10 9v5l4-2.5z"/><path d="M8 21h8"/>',
     team:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.2 4.1-6.5 8-6.5s7 2.3 8 6.5"/>',
     earnings:'<rect x="2" y="6" width="20" height="13"/><circle cx="12" cy="12.5" r="3"/><path d="M6 9.5v6M18 9.5v6"/>'
   };
-  const SHORT_TITLES = {wip:"In Progress",forsale:"For Sale",leads:"Leads"};
-  const TITLES = {settings:"Settings",wip:"Work in Progress",calendar:"Calendar",board:"Tech Board",customers:"Customers",inventory:"Inventory",timesheets:"Timesheets",reports:"Reports",clock:"Time Clock",jobs:"My Jobs",training:"Training",forsale:"Cars for Sale",leads:"Website Leads",team:"Team",earnings:"Earnings"};
+  const SHORT_TITLES = {wip:"In Progress",forsale:"For Sale",leads:"Leads",collision:"Collision",bodyjobs:"Body Jobs"};
+  const TITLES = {settings:"Settings",wip:"Work in Progress",calendar:"Calendar",board:"Tech Board",customers:"Customers",inventory:"Inventory",timesheets:"Timesheets",reports:"Reports",clock:"Time Clock",jobs:"My Jobs",training:"Training",collision:"Collision Board",bodyjobs:"My Body Jobs",forsale:"Cars for Sale",leads:"Website Leads",team:"Team",earnings:"Earnings"};
   let chromeTick=null;
 
   const roleLabel=u=>{ const r=roleOfU(u); return r?r.name:u.dbRole==="owner"?"Owner":u.dbRole==="gm"?"Manager":"Technician"; };
@@ -1770,8 +1789,8 @@
     $("#whoInit").textContent=(me.name||"?").slice(0,1).toUpperCase();
     const mgr = me.role==="manager";
     const groups = (mgr
-      ? [["Shop",["wip","calendar","board","customers","inventory","reports"]],["Website",["forsale","leads"]],["Team",["timesheets","clock","training","team",...(me.finance?["earnings"]:[])]]]
-      : [["My day",["jobs","clock","training"]]]).map(([g,keys])=>[g,keys.filter(k=>k==="timesheets"||k==="earnings"||canPage(k))]).filter(([g,keys])=>keys.length);
+      ? [["Shop",["wip","calendar","board","customers","inventory","reports"]],["Collision",["collision"]],["Website",["forsale","leads"]],["Team",["timesheets","clock","training","team",...(me.finance?["earnings"]:[])]]]
+      : [["My day",[shopWork(me)==="body"?"bodyjobs":"jobs","clock","training"]]]).map(([g,keys])=>[g,keys.filter(k=>k==="timesheets"||k==="earnings"||canPage(k))]).filter(([g,keys])=>keys.length);
     $("#tabs").innerHTML = groups.map(([g,keys])=>`<div class="sect">${g}</div>`+keys.map(k=>
       `<button data-tab="${k}"><svg viewBox="0 0 24 24">${ICONS[k]}</svg><span>${TITLES[k]}</span>${k==="leads"?'<span class="count red hidden" id="leadCount"></span>':""}${k==="wip"?'<span class="count" id="wipCount"></span>':""}</button>`).join("")).join("");
     $("#tabs").onclick = e=>{ const b=e.target.closest("button"); if(b){ if(b.dataset.tab==="team") viewTeam.open=null; show(b.dataset.tab); $("#app").classList.remove("nav-open"); } };
@@ -1792,9 +1811,9 @@
     const wm=(location.hash||"").match(/^#ws=(.+)$/), qm=(location.hash||"").match(/^#qbo=(\w+)/);
     const sqr=mgr?sqReadReturn():null;
     if(sqr){ show("wip"); sqHandleReturn(sqr); }
-    else if(qm){ try{ history.replaceState(null,"",location.pathname); }catch(e){} show(mgr?"settings":"jobs");
+    else if(qm){ try{ history.replaceState(null,"",location.pathname); }catch(e){} show(mgr?"settings":homeTab());
       toast({connected:"QuickBooks connected",cancelled:"QuickBooks connection cancelled",expired:"That took too long \u2014 try Connect QuickBooks again"}[qm[1]]||"Couldn't connect QuickBooks \u2014 try again"); }
-    else if(wm && db.jobs.some(j=>j.id===wm[1])) openWorksheet(wm[1]); else show(mgr?"wip":"jobs");
+    else if(wm && db.jobs.some(j=>j.id===wm[1])) openWorksheet(wm[1]); else show(mgr?"wip":homeTab());
     if(mgr){ setTimeout(()=>qboSync(null,true),4000); setInterval(()=>{ if(document.visibilityState==="visible") qboSync(null,true); },180000); }
   }
   function updateChrome(){
@@ -1807,6 +1826,7 @@
     renderAlerts();
   }
   function show(t){
+    if(t==="jobs"&&me&&me.role!=="manager"&&shopWork(me)==="body") t="bodyjobs";
     if(me&&t==="earnings"&&!isFin()) t="clock";
     if(me&&t!=="settings"&&t!=="timesheets"&&t!=="earnings"&&!canPage(t)){ const f=document.querySelector("#tabs button[data-tab]"); if(f&&f.dataset.tab!==t) t=f.dataset.tab; }
     if(t==="jobs") viewJobs.open=null;
@@ -1816,7 +1836,7 @@
     document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.tab===t));
     $("#pageTitle").textContent = (innerWidth<=480&&SHORT_TITLES[t])||TITLES[t]||"";
     document.querySelector(".topbar").classList.remove("search-open");
-    ({clock:viewClock,jobs:viewJobs,training:viewTraining,forsale:viewForSale,leads:viewLeads,board:viewBoard,timesheets:viewTimesheets,team:viewTeam,earnings:viewEarnings,wip:viewWip,customers:viewCustomers,inventory:viewInventory,reports:viewReports,calendar:viewCalendar,settings:viewSettings})[t]();
+    ({clock:viewClock,jobs:viewJobs,training:viewTraining,collision:viewCollision,bodyjobs:viewBodyJobs,forsale:viewForSale,leads:viewLeads,board:viewBoard,timesheets:viewTimesheets,team:viewTeam,earnings:viewEarnings,wip:viewWip,customers:viewCustomers,inventory:viewInventory,reports:viewReports,calendar:viewCalendar,settings:viewSettings})[t]();
     updateChrome(); window.scrollTo(0,0);
   }
 
@@ -2424,6 +2444,329 @@
     $("#view").querySelectorAll("[data-ldone]").forEach(b=>b.onclick=async()=>{ const l=web.leads.find(x=>String(x.id)===b.dataset.ldone), st=l.status==="new"?"done":"new";
       const {error}=await sb.from("leads").update({status:st,handled_by:st==="done"?me.id:null,handled_at:st==="done"?new Date().toISOString():null}).eq("id",l.id);
       if(error){ toast("Not saved: "+error.message); return; } l.status=st; leadCount(); viewLeads(); });
+  }
+
+  /* ---------- collision center (body shop): board, job file, estimate, parts, photos, body tech page ---------- */
+  const B_STAGES=[["estimate","Estimate"],["approval","Waiting approval"],["parts","Waiting parts"],["teardown","Teardown"],["body","Body / frame"],["prep","Paint prep"],["paint","Paint"],["reassembly","Reassembly"],["detail","Detail"],["qc","Quality check"],["ready","Ready for pickup"],["delivered","Delivered"]];
+  const B_ST=Object.fromEntries(B_STAGES); const B_FLOOR=["teardown","body","prep","paint","reassembly","detail","qc"];
+  const B_WHO={teardown:"body_tech",body:"body_tech",prep:"prep_tech",paint:"painter",reassembly:"body_tech",detail:"prep_tech",qc:"body_tech"};
+  const B_CHECKS={
+    teardown:["Photos of all damage before teardown","Remove damaged parts and bag & tag hardware","Look for hidden damage and photo it","Tell the manager about anything not on the estimate"],
+    body:["Repairs done per the estimate","Frame / unibody measured if needed","New panels test fit and gaps checked","Photos of the finished body work"],
+    prep:["Wash and degrease","Sand and feather edges","Prime / seal and block","Mask the car","Photo before it goes in the booth"],
+    paint:["Paint code checked against the car","Spray-out card matched to the car","Base and clear applied","Inspect for dirt, runs and texture","Photos after paint"],
+    reassembly:["All parts installed, nothing left over","Panel gaps and alignment checked","Lights, sensors and electrical tested","Scan for codes; note any ADAS calibration needed","Photos after reassembly"],
+    detail:["Cut and buff where needed","Remove overspray and masking dust","Clean the interior and windows","Final photos"],
+    qc:["Walk-around in good light","Every estimate line done","Road test","No warning lights or codes","Final photos for the file"]};
+  const B_OPS=[["Repl","Replace"],["Rpr","Repair"],["R&I","Remove & install"],["Refn","Refinish"],["Blnd","Blend"],["Subl","Sublet"],["Mech","Mechanical"],["Misc","Other"]];
+  const B_IMPACT=["Front","Left front","Left side","Left rear","Rear","Right rear","Right side","Right front","Hood","Roof","Trunk / liftgate","Undercarriage","Interior","Glass"];
+  const B_PSTAT=[["needed","Needed"],["ordered","Ordered"],["backordered","Back-ordered"],["received","Received"],["installed","Installed"],["returned","Returned"],["cancelled","Cancelled"]];
+  let bdb={jobs:null,parts:[],time:[],rates:null};
+  const bNum=j=>"C-"+j.number;
+  const bCar=j=>[j.year,j.make,j.model].filter(Boolean).join(" ")||"Vehicle";
+  const bUser=id=>(db.allUsers||db.users||[]).find(u=>u.id===id);
+  const bInit=id=>{ const u=bUser(id); return u?u.name.split(" ").map(s=>s[0]).join("").slice(0,2).toUpperCase():""; };
+  const bDays=t=>{ const d=Math.floor((Date.now()-new Date(t).getTime())/864e5); return d<=0?"today":d===1?"1 day":d+" days"; };
+  const bm=n=>"$"+Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+  const bNumv=v=>{ const n=parseFloat(String(v??"").replace(/[^\d.\-]/g,"")); return isNaN(n)?0:n; };
+  const bodyPeople=()=>db.users.filter(u=>u.active!==false&&(shopWork(u)==="body"||shopWork(u)==="repair"))
+    .sort((a,b)=>(shopWork(a)==="body"?0:1)-(shopWork(b)==="body"?0:1)||a.name.localeCompare(b.name));
+  async function loadBody(){
+    const [jobs,parts,time,st]=await Promise.all([fetchAll("body_jobs"),fetchAll("body_parts"),fetchAll("body_time"),sb.from("shop_settings").select("body_rates,tax").eq("id",1).maybeSingle()]);
+    bdb={jobs:jobs.sort((a,b)=>b.number-a.number),parts,time,rates:(st.data&&st.data.body_rates)||null,tax:Number((st.data&&st.data.tax)??0.08375)};
+  }
+  function bTotals(j){
+    const r=j.rates||bdb.rates||{}, L=j.estimate||[], s=k=>L.reduce((a,x)=>a+bNumv(x[k])*(k==="part"?Math.max(bNumv(x.qty)||1,0):1),0);
+    const h={body:s("body"),refn:s("refn"),frame:s("frame"),mech:s("mech")};
+    const parts=s("part"), sublet=s("sublet");
+    const labor={body:h.body*bNumv(r.body),refn:h.refn*bNumv(r.refinish),frame:h.frame*bNumv(r.frame),mech:h.mech*bNumv(r.mech)};
+    const materials=h.refn*bNumv(r.materials);
+    const laborT=labor.body+labor.refn+labor.frame+labor.mech;
+    const tax=Math.round((parts+materials)*(bdb.tax||0)*100)/100;
+    const total=Math.round((parts+materials+laborT+sublet+tax)*100)/100;
+    const ded=j.payer==="customer"?0:Math.min(bNumv(j.deductible),total);
+    return {h,parts,sublet,labor,laborT,materials,tax,total,ded,ins:j.payer==="customer"?0:total-ded,cust:j.payer==="customer"?total:ded,ratesSet:["body","refinish"].every(k=>bNumv(r[k])>0)};
+  }
+  function bPartsInfo(id){ const ps=bdb.parts.filter(p=>p.job_id===id&&!["cancelled","returned"].includes(p.status)); const inn=ps.filter(p=>["received","installed"].includes(p.status)).length; return {n:ps.length,inn,back:ps.some(p=>p.status==="backordered"),waiting:ps.length-inn}; }
+  async function bSave(j,patch,msg){
+    const {data,error}=await sb.from("body_jobs").update(patch).eq("id",j.id).select().single();
+    if(error){ toast("Not saved: "+error.message); return null; }
+    Object.assign(j,data,{id:j.id}); if(msg&&msg.trim()) toast(msg); return j;
+  }
+  async function bLog(j,kind,detail){ try{ await sb.from("body_events").insert({job_id:j.id,kind,detail,user_id:me.id}); }catch(e){} }
+
+  function viewCollision(){
+    if(!bdb.jobs){ $("#view").innerHTML='<div class="card"><div class="empty">Loading\u2026</div></div>'; loadBody().then(()=>{ if(tab==="collision") viewCollision(); }).catch(e=>{ $("#view").innerHTML=`<div class="card"><div class="empty">Couldn't load the body shop: ${esc(e.message||e)}</div></div>`; }); return; }
+    if(viewCollision.open){ const j=bdb.jobs.find(x=>x.id===viewCollision.open); if(j) return bodyJobView(j); viewCollision.open=null; }
+    const q=(viewCollision.q||"").toLowerCase(), showDone=!!viewCollision.done;
+    const match=j=>!q||[bNum(j),bCar(j),j.cust_name,j.cust_phone,j.vin,j.claim_no,j.insurer,j.color].join(" ").toLowerCase().includes(q);
+    const active=bdb.jobs.filter(j=>!["delivered","cancelled"].includes(j.stage));
+    const card=j=>{ const pi=bPartsInfo(j.id), who=[j.body_tech,j.painter,j.prep_tech].filter(Boolean).map(bInit).filter(Boolean);
+      return `<button type="button" class="cb-card ${j.on_hold?"hold":""}" data-bj="${j.id}">
+        <div class="row" style="gap:6px"><span class="mono" style="font-size:12px">${esc(bNum(j))}</span>${j.priority==="rush"?'<span class="pill red">Rush</span>':""}<span class="spacer"></span><span class="muted" style="font-size:11.5px">${esc(bDays(j.stage_at))}</span></div>
+        <b>${esc(bCar(j))}</b>${j.color?`<span class="muted" style="font-size:12.5px"> \u00b7 ${esc(j.color)}</span>`:""}
+        <div class="muted" style="font-size:12.5px">${esc(j.cust_name||"No customer")}${j.payer!=="customer"?` \u00b7 ${esc(j.insurer||"Insurance")}`:""}</div>
+        <div class="row" style="gap:6px;margin-top:6px;flex-wrap:wrap">${pi.n?`<span class="pill ${pi.back?"red":pi.waiting?"":"green"}">Parts ${pi.inn}/${pi.n}${pi.back?" \u00b7 back-order":""}</span>`:""}${j.on_hold?`<span class="pill red">On hold</span>`:""}<span class="spacer"></span>${who.map(w=>`<span class="cb-av">${esc(w)}</span>`).join("")}</div></button>`; };
+    const cols=B_STAGES.filter(([k])=>k!=="delivered").map(([k,l])=>{ const js=active.filter(j=>j.stage===k&&match(j)); return `<section class="cb-col"><h3>${esc(l)}<span>${js.length}</span></h3>${js.map(card).join("")||'<div class="cb-none">\u2014</div>'}</section>`; }).join("");
+    const done=bdb.jobs.filter(j=>["delivered","cancelled"].includes(j.stage)&&match(j)).slice(0,60);
+    $("#view").innerHTML=`<div class="card"><div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:12px"><h2 style="margin:0">Collision board</h2><span class="muted">${active.length} active</span><span class="spacer"></span>
+        <input id="cbQ" placeholder="Search car, customer, claim #" value="${esc(viewCollision.q||"")}" style="max-width:260px">
+        <button class="btn ghost sm" type="button" id="cbDone">${showDone?"Show board":"Delivered jobs"}</button>${bdb.rates?"":'<button class="btn ghost sm" type="button" id="cbRates">Set body shop rates</button>'}<button class="btn sm" type="button" id="cbNew">+ New collision job</button></div>
+      ${showDone?`<div class="tablewrap"><table><thead><tr><th>#</th><th>Vehicle</th><th>Customer</th><th>Payer</th><th>Delivered</th><th class="num">Total</th></tr></thead><tbody>${done.map(j=>`<tr class="clickable" data-bj="${j.id}"><td class="mono">${esc(bNum(j))}</td><td>${esc(bCar(j))}</td><td>${esc(j.cust_name||"")}</td><td>${j.payer==="customer"?"Customer":esc(j.insurer||"Insurance")}</td><td>${j.stage==="cancelled"?"Cancelled":esc(j.delivered_at?new Date(j.delivered_at).toLocaleDateString():"")}</td><td class="num mono">${bm(bTotals(j).total)}</td></tr>`).join("")||'<tr><td colspan="6" class="muted">None yet.</td></tr>'}</tbody></table></div>`
+      :`<div class="cb-board">${cols}</div>`}</div>`;
+    $("#view").querySelectorAll("[data-bj]").forEach(b=>b.onclick=()=>{ viewCollision.open=b.dataset.bj; viewCollision.tab="overview"; viewCollision(); window.scrollTo(0,0); });
+    const qi=$("#cbQ"); qi.oninput=()=>{ viewCollision.q=qi.value; clearTimeout(viewCollision.t); viewCollision.t=setTimeout(()=>{ viewCollision(); const n=$("#cbQ"); if(n){ n.focus(); n.setSelectionRange(n.value.length,n.value.length); } },250); };
+    $("#cbDone").onclick=()=>{ viewCollision.done=!showDone; viewCollision(); };
+    $("#cbNew").onclick=()=>bodyNewModal();
+    const r=$("#cbRates"); if(r) r.onclick=bodyRatesModal;
+  }
+  function bodyRatesModal(after){
+    const r=bdb.rates||{};
+    const f=(k,l,h)=>`<div><label>${l}</label><input id="br_${k}" inputmode="decimal" value="${esc(r[k]??"")}" placeholder="$ per hour"><div class="hint">${h}</div></div>`;
+    modal(`<h2>Body shop rates</h2><p class="muted" style="margin-top:0">Used on new collision estimates. Each job keeps the rates it was written with.</p>
+      <div class="two">${f("body","Body labor","Per body hour")}${f("refinish","Refinish (paint) labor","Per refinish hour")}</div>
+      <div class="two">${f("frame","Frame labor","Per frame hour")}${f("mech","Mechanical labor","Per mechanical hour")}</div>
+      <div class="two"><div><label>Paint materials</label><input id="br_materials" inputmode="decimal" value="${esc(r.materials??"")}" placeholder="$ per refinish hour"><div class="hint">Charged per refinish hour</div></div><div></div></div>
+      <div class="hint">Parts and paint materials are taxed at ${(bdb.tax*100).toFixed(3).replace(/0+$/,"")}%. Labor isn't taxed.</div>
+      <div class="row end"><button class="btn ghost" data-close type="button">Cancel</button><button class="btn" type="button" id="brSave">Save rates</button></div>`, root=>{
+      root.querySelector("#brSave").onclick=async()=>{ const nr={}; ["body","refinish","frame","mech","materials"].forEach(k=>{ const v=root.querySelector("#br_"+k).value.trim(); if(v!=="") nr[k]=bNumv(v); });
+        if(!(nr.body>0&&nr.refinish>0)){ toast("Enter at least the body and refinish rates"); return; }
+        const {error}=await sb.from("shop_settings").update({body_rates:nr}).eq("id",1); if(error){ toast("Not saved: "+error.message); return; }
+        bdb.rates=nr; closeModal(); toast("Rates saved"); if(typeof after==="function") after(); else if(tab==="collision") viewCollision(); };
+    });
+  }
+  function bodyNewModal(){
+    const pickCust=(db.customers||[]).slice().sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+    modal(`<h2>New collision job</h2>
+      <label>Existing customer (optional)</label><select id="bnC"><option value="">New customer</option>${pickCust.map(c=>`<option value="${esc(c.id)}">${esc(c.name)}${c.phone?` \u00b7 ${esc(c.phone)}`:""}</option>`).join("")}</select>
+      <div class="two"><div><label>Customer name</label><input id="bnN"></div><div><label>Phone</label><input id="bnP" type="tel"></div></div>
+      <div class="two"><div><label>Year</label><input id="bnY" inputmode="numeric" maxlength="4"></div><div><label>Make</label><input id="bnMk"></div></div>
+      <div class="two"><div><label>Model</label><input id="bnMd"></div><div><label>Color</label><input id="bnCo"></div></div>
+      <label>VIN</label><input id="bnV" maxlength="17" class="mono" style="text-transform:uppercase">
+      <label>Who's paying?</label><select id="bnPay"><option value="customer">Customer pays</option><option value="insurance">Insurance claim</option><option value="mixed">Insurance plus customer-pay extras</option></select>
+      <label>What happened / damage</label><textarea id="bnD" rows="3" placeholder="Rear-ended at a light. Bumper, trunk lid, tail lights."></textarea>
+      <div class="row end"><button class="btn ghost" data-close type="button">Cancel</button><button class="btn" type="button" id="bnGo">Create job</button></div>`, root=>{
+      const cs=root.querySelector("#bnC");
+      cs.onchange=()=>{ const c=pickCust.find(x=>x.id===cs.value); if(!c) return; root.querySelector("#bnN").value=c.name||""; root.querySelector("#bnP").value=c.phone||"";
+        const v=(db.vehicles||[]).find(x=>x.customerId===c.id||x.customer_id===c.id); if(v){ root.querySelector("#bnY").value=v.year||""; root.querySelector("#bnMk").value=v.make||""; root.querySelector("#bnMd").value=v.model||""; root.querySelector("#bnV").value=v.vin||""; root.dataset.veh=v.id; } };
+      root.querySelector("#bnGo").onclick=async()=>{ const g=id=>root.querySelector(id).value.trim();
+        if(!g("#bnN")&&!cs.value){ toast("Add the customer's name"); return; }
+        if(!g("#bnMk")&&!g("#bnMd")){ toast("Add the make and model"); return; }
+        const row={customer_id:cs.value||null,cust_name:g("#bnN"),cust_phone:g("#bnP"),year:g("#bnY"),make:g("#bnMk"),model:g("#bnMd"),color:g("#bnCo"),vin:g("#bnV").toUpperCase()||null,payer:g("#bnPay"),damage:g("#bnD"),vehicle_id:root.dataset.veh||null,rates:bdb.rates||null,created_by:me.id};
+        const {data,error}=await sb.from("body_jobs").insert(row).select().single(); if(error){ toast("Not created: "+error.message); return; }
+        bdb.jobs.unshift(data); bLog(data,"created","Job created"); closeModal(); viewCollision.open=data.id; viewCollision.tab="overview"; viewCollision(); toast(bNum(data)+" created"); };
+    });
+  }
+  function bodyJobView(j){
+    const t=viewCollision.tab||"overview", T=bTotals(j), pi=bPartsInfo(j.id);
+    const tabs=[["overview","Overview"],["estimate","Estimate"],["parts",`Parts${pi.n?` ${pi.inn}/${pi.n}`:""}`],["photos","Photos"],["activity","Time & activity"]];
+    const si=B_STAGES.findIndex(([k])=>k===j.stage);
+    $("#view").innerHTML=`<div class="card"><div class="row" style="gap:10px;flex-wrap:wrap"><button class="btn ghost sm" type="button" id="bjBack">\u2039 Board</button>
+        <h2 style="margin:0">${esc(bNum(j))} \u00b7 ${esc(bCar(j))}</h2>${j.on_hold?'<span class="pill red">On hold</span>':""}<span class="spacer"></span>
+        <span class="muted">${esc(j.cust_name||"")}</span><b class="mono">${bm(T.total)}</b></div>
+      <div class="cb-steps">${B_STAGES.map(([k,l],i)=>`<button type="button" data-bst="${k}" class="${i<si?"done":i===si?"on":""}" title="Move to ${esc(l)}">${esc(l)}</button>`).join("")}</div>
+      <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px"><span class="muted" style="font-size:12.5px">In ${esc(B_ST[j.stage]||j.stage)} for ${esc(bDays(j.stage_at))}</span><span class="spacer"></span>
+        <button class="btn ghost sm" type="button" id="bjHold">${j.on_hold?"Take off hold":"Put on hold"}</button>${si<B_STAGES.length-1?`<button class="btn sm" type="button" id="bjNext">Move to ${esc(B_STAGES[si+1][1])} \u203a</button>`:""}</div>
+      <div class="jtabs" style="margin-top:14px">${tabs.map(([k,l])=>`<button type="button" class="${k===t?"on":""}" data-btab="${k}">${l}</button>`).join("")}</div>
+      <div id="bjBody"></div></div>`;
+    $("#bjBack").onclick=()=>{ viewCollision.open=null; viewCollision(); };
+    $("#view").querySelectorAll("[data-btab]").forEach(b=>b.onclick=()=>{ viewCollision.tab=b.dataset.btab; bodyJobView(j); });
+    const setStage=async k=>{ if(k===j.stage) return; if(await bSave(j,{stage:k},"Moved to "+B_ST[k])) bodyJobView(j); };
+    $("#view").querySelectorAll("[data-bst]").forEach(b=>b.onclick=()=>setStage(b.dataset.bst));
+    const nx=$("#bjNext"); if(nx) nx.onclick=()=>setStage(B_STAGES[si+1][0]);
+    $("#bjHold").onclick=async()=>{ let reason=null; if(!j.on_hold){ reason=prompt("Why is it on hold? (waiting on adjuster, customer, parts...)"); if(reason===null) return; }
+      if(await bSave(j,{on_hold:!j.on_hold,hold_reason:reason||null},j.on_hold?"Off hold":"On hold")) bodyJobView(j); };
+    ({overview:bjOverview,estimate:bjEstimate,parts:bjParts,photos:bjPhotos,activity:bjActivity}[t]||bjOverview)(j,$("#bjBody"));
+  }
+  function bjOverview(j,el){
+    const ppl=bodyPeople(), sel=(k,l)=>`<div><label>${l}</label><select data-bf="${k}"><option value="">Nobody yet</option>${ppl.map(u=>`<option value="${u.id}" ${j[k]===u.id?"selected":""}>${esc(u.name)}${shopWork(u)==="body"?"":" (repair)"}</option>`).join("")}</select></div>`;
+    const inp=(k,l,o)=>`<div><label>${l}</label><input data-bf="${k}" value="${esc(j[k]??"")}" ${o||""}></div>`;
+    const ins=j.payer!=="customer";
+    el.innerHTML=`<div class="cb-grid">
+      <div><h3>Who's working on it</h3><div class="two">${sel("body_tech","Body tech")}${sel("painter","Painter")}</div><div class="two">${sel("prep_tech","Prep / detail")}<div><label>Priority</label><select data-bf="priority"><option value="normal">Normal</option><option value="rush" ${j.priority==="rush"?"selected":""}>Rush</option></select></div></div>
+        <h3 style="margin-top:18px">Customer</h3><div class="two">${inp("cust_name","Name")}${inp("cust_phone","Phone",'type="tel"')}</div>${inp("cust_email","Email",'type="email"')}
+        <h3 style="margin-top:18px">Vehicle</h3><div class="two">${inp("year","Year",'inputmode="numeric"')}${inp("make","Make")}</div><div class="two">${inp("model","Model")}${inp("color","Color")}</div>
+        <div class="two">${inp("vin","VIN",'class="mono" maxlength="17" style="text-transform:uppercase"')}${inp("paint_code","Paint code",'class="mono"')}</div><div class="two">${inp("mileage","Mileage",'inputmode="numeric"')}${inp("plate","Plate")}</div>
+        <div><label>Drivable?</label><select data-bf="drivable"><option value="">Not noted</option><option value="true" ${j.drivable===true?"selected":""}>Yes</option><option value="false" ${j.drivable===false?"selected":""}>No (towed in)</option></select></div></div>
+      <div><h3>Who's paying</h3><select data-bf="payer"><option value="customer">Customer pays</option><option value="insurance" ${j.payer==="insurance"?"selected":""}>Insurance claim</option><option value="mixed" ${j.payer==="mixed"?"selected":""}>Insurance plus customer-pay extras</option></select>
+        <div id="bjIns" ${ins?"":'style="display:none"'}><div class="two">${inp("insurer","Insurance company")}${inp("claim_no","Claim #",'class="mono"')}</div><div class="two">${inp("policy_no","Policy #",'class="mono"')}${inp("deductible","Deductible ($)",'inputmode="decimal"')}</div>
+          <div class="two">${inp("adjuster","Adjuster")}${inp("adjuster_phone","Adjuster phone",'type="tel"')}</div>${inp("adjuster_email","Adjuster email",'type="email"')}</div>
+        <h3 style="margin-top:18px">Damage</h3><div class="cb-impact">${B_IMPACT.map(x=>`<label><input type="checkbox" data-imp="${esc(x)}" ${(j.impact||[]).includes(x)?"checked":""}> ${esc(x)}</label>`).join("")}</div>
+        <label>What happened</label><textarea data-bf="damage" rows="3">${esc(j.damage||"")}</textarea>
+        <label>Notes for the team</label><textarea data-bf="notes" rows="3">${esc(j.notes||"")}</textarea>
+        ${j.on_hold&&j.hold_reason?`<p class="pill red" style="margin-top:10px">On hold: ${esc(j.hold_reason)}</p>`:""}</div></div>
+      <div class="row end" style="margin-top:14px"><span class="muted" id="bjSaved"></span><button class="btn ghost danger sm" type="button" id="bjCancel">${j.stage==="cancelled"?"Reopen job":"Cancel job"}</button><button class="btn" type="button" id="bjSave">Save</button></div>`;
+    const pay=el.querySelector('[data-bf="payer"]'); pay.onchange=()=>{ el.querySelector("#bjIns").style.display=pay.value==="customer"?"none":""; };
+    el.querySelector("#bjSave").onclick=async()=>{ const p={};
+      el.querySelectorAll("[data-bf]").forEach(i=>{ const k=i.dataset.bf; let v=i.value.trim(); if(k==="drivable") v=v===""?null:v==="true"; else if(k==="deductible") v=v===""?null:bNumv(v); else if(["body_tech","painter","prep_tech"].includes(k)) v=v||null; else if(k==="vin") v=v.toUpperCase()||null; p[k]=v; });
+      p.impact=[...el.querySelectorAll("[data-imp]:checked")].map(i=>i.dataset.imp);
+      const who=["body_tech","painter","prep_tech"].filter(k=>(p[k]||null)!==(j[k]||null));
+      if(await bSave(j,p,"Saved")){ who.forEach(k=>bLog(j,"assign",`${{body_tech:"Body tech",painter:"Painter",prep_tech:"Prep / detail"}[k]}: ${(bUser(p[k])||{}).name||"nobody"}`)); bodyJobView(j); } };
+    el.querySelector("#bjCancel").onclick=async()=>{ const reopen=j.stage==="cancelled"; if(!reopen&&!confirm(`Cancel ${bNum(j)}? It moves off the board. You can reopen it later.`)) return;
+      if(await bSave(j,{stage:reopen?"estimate":"cancelled"},reopen?"Reopened":"Cancelled")){ viewCollision.open=reopen?j.id:null; viewCollision(); } };
+  }
+  function bjEstimate(j,el){
+    const L=(j.estimate||[]).map(x=>({...x})), T=bTotals(j), r=j.rates||bdb.rates||{};
+    let supp=Math.max(0,...L.map(x=>x.supp||0)); if(bjEstimate.supp!=null&&bjEstimate.job===j.id) supp=bjEstimate.supp;
+    const num=(i,k,w)=>`<td><input data-el="${i}|${k}" value="${esc(L[i][k]??"")}" inputmode="decimal" class="mono" style="width:${w||64}px"></td>`;
+    const rows=L.map((x,i)=>`<tr${x.supp?' class="cb-supp"':""}><td><select data-el="${i}|op">${B_OPS.map(([k,l])=>`<option value="${k}" ${x.op===k?"selected":""} title="${l}">${k}</option>`).join("")}</select></td>
+      <td><input data-el="${i}|desc" value="${esc(x.desc||"")}" style="min-width:200px"></td><td><input data-el="${i}|partNo" value="${esc(x.partNo||"")}" class="mono" style="width:110px"></td>
+      ${num(i,"qty",44)}${num(i,"part",80)}${num(i,"body")}${num(i,"refn")}${num(i,"frame")}${num(i,"mech")}${num(i,"sublet",80)}
+      <td class="muted mono" style="font-size:12px">${x.supp?"S"+x.supp:""}</td><td><button class="btn ghost sm" type="button" data-edel="${i}" aria-label="Remove line">\u00d7</button></td></tr>`).join("");
+    el.innerHTML=`${T.ratesSet?"":`<div class="cb-warn">Set your body shop rates to price labor. <button class="btn sm" type="button" id="beRates">Set rates</button></div>`}
+      <div class="row" style="gap:8px;flex-wrap:wrap;margin:6px 0 10px"><span class="muted" style="font-size:12.5px">Rates on this job: body ${bm(r.body)}, refinish ${bm(r.refinish)}, frame ${bm(r.frame)}, mech ${bm(r.mech)}, materials ${bm(r.materials)} per refinish hr</span><span class="spacer"></span>
+        ${bdb.rates&&JSON.stringify(bdb.rates)!==JSON.stringify(j.rates)?'<button class="btn ghost sm" type="button" id="beUseRates">Use current shop rates</button>':""}
+        <label class="muted" style="font-size:12.5px;display:flex;gap:6px;align-items:center;margin:0">Adding to <select id="beSupp" style="width:auto"><option value="0">Original estimate</option>${Array.from({length:supp+1},(_,k)=>k+1).map(n=>`<option value="${n}" ${n===supp&&supp>0?"selected":""}>Supplement ${n}</option>`).join("")}</select></label></div>
+      <div class="tablewrap"><table class="cb-est"><thead><tr><th>Op</th><th>Description</th><th>Part #</th><th>Qty</th><th>Part $</th><th>Body hr</th><th>Paint hr</th><th>Frame hr</th><th>Mech hr</th><th>Sublet $</th><th></th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="12" class="muted">No lines yet. Add the first one.</td></tr>'}</tbody></table></div>
+      <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn ghost sm" type="button" id="beAdd">+ Add line</button><button class="btn ghost sm" type="button" id="beParts">Make parts list from Replace lines</button><span class="spacer"></span><button class="btn ghost sm" type="button" id="bePrint">Print estimate</button><button class="btn" type="button" id="beSave">Save estimate</button></div>
+      <div class="cb-tot"><div><span>Parts</span><b class="mono">${bm(T.parts)}</b></div><div><span>Body labor \u00b7 ${T.h.body} hr</span><b class="mono">${bm(T.labor.body)}</b></div><div><span>Refinish labor \u00b7 ${T.h.refn} hr</span><b class="mono">${bm(T.labor.refn)}</b></div>
+        ${T.h.frame?`<div><span>Frame labor \u00b7 ${T.h.frame} hr</span><b class="mono">${bm(T.labor.frame)}</b></div>`:""}${T.h.mech?`<div><span>Mechanical labor \u00b7 ${T.h.mech} hr</span><b class="mono">${bm(T.labor.mech)}</b></div>`:""}
+        <div><span>Paint materials</span><b class="mono">${bm(T.materials)}</b></div>${T.sublet?`<div><span>Sublet</span><b class="mono">${bm(T.sublet)}</b></div>`:""}<div><span>Tax on parts &amp; materials</span><b class="mono">${bm(T.tax)}</b></div>
+        <div class="big"><span>Total</span><b class="mono">${bm(T.total)}</b></div>
+        ${j.payer!=="customer"?`<div><span>Customer pays (deductible)</span><b class="mono">${bm(T.ded)}</b></div><div><span>Insurance pays</span><b class="mono">${bm(T.ins)}</b></div>`:""}</div>
+      <div class="hint">Ops: Repl replace \u00b7 Rpr repair \u00b7 R&amp;I remove &amp; install \u00b7 Refn refinish \u00b7 Blnd blend \u00b7 Subl sublet. Paint hours go in "Paint hr". Lines added after approval are marked as supplements.</div>`;
+    const grab=()=>{ el.querySelectorAll("[data-el]").forEach(i=>{ const [n,k]=i.dataset.el.split("|"); L[+n][k]=i.value; }); };
+    const saveL=async msg=>{ grab(); const clean=L.filter(x=>String(x.desc||"").trim()||bNumv(x.part)||bNumv(x.body)||bNumv(x.refn)||bNumv(x.sublet)).map(x=>({...x,desc:String(x.desc||"").trim()}));
+      if(await bSave(j,{estimate:clean,rates:j.rates||bdb.rates||null},msg||"Estimate saved")) bodyJobView(j); };
+    el.querySelector("#beAdd").onclick=()=>{ grab(); L.push({id:uid().slice(0,8),op:"Repl",qty:1,supp:+el.querySelector("#beSupp").value||0}); j.estimate=L; bjEstimate.supp=+el.querySelector("#beSupp").value; bjEstimate.job=j.id; bjEstimate(j,el); const ins=el.querySelectorAll('[data-el$="|desc"]'); if(ins.length) ins[ins.length-1].focus(); };
+    el.querySelector("#beSupp").onchange=e=>{ bjEstimate.supp=+e.target.value; bjEstimate.job=j.id; if(+e.target.value>supp){ supp=+e.target.value; } };
+    el.querySelectorAll("[data-edel]").forEach(b=>b.onclick=()=>{ grab(); L.splice(+b.dataset.edel,1); j.estimate=L; bjEstimate(j,el); });
+    el.querySelector("#beSave").onclick=()=>saveL();
+    const ur=el.querySelector("#beUseRates"); if(ur) ur.onclick=async()=>{ grab(); j.estimate=L; if(await bSave(j,{estimate:L,rates:bdb.rates},"Using current shop rates")) bodyJobView(j); };
+    const rb=el.querySelector("#beRates"); if(rb) rb.onclick=()=>bodyRatesModal(async()=>{ if(!j.rates){ await bSave(j,{rates:bdb.rates}); } bodyJobView(j); });
+    el.querySelector("#beParts").onclick=async()=>{ grab(); await saveL(" "); const have=new Set(bdb.parts.filter(p=>p.job_id===j.id).map(p=>p.line_id));
+      const add=(j.estimate||[]).filter(x=>x.op==="Repl"&&x.id&&!have.has(x.id)).map(x=>({job_id:j.id,line_id:x.id,descr:x.desc||"Part",part_no:x.partNo||null,qty:bNumv(x.qty)||1,price:bNumv(x.part)||null}));
+      if(!add.length){ toast("Every Replace line already has a part"); return; }
+      const {data,error}=await sb.from("body_parts").insert(add).select(); if(error){ toast("Not added: "+error.message); return; }
+      bdb.parts.push(...data); toast(`${data.length} part${data.length===1?"":"s"} added to the parts list`); viewCollision.tab="parts"; bodyJobView(j); };
+    el.querySelector("#bePrint").onclick=()=>{ grab(); bodyPrintEstimate({...j,estimate:L}); };
+  }
+  function bodyPrintEstimate(j){
+    const T=bTotals(j), w=window.open("","_blank"); if(!w){ toast("Allow pop-ups to print"); return; }
+    const groups=[0,...new Set((j.estimate||[]).map(x=>x.supp||0).filter(Boolean))].filter((v,i,a)=>a.indexOf(v)===i);
+    const row=x=>`<tr><td>${esc(x.op||"")}</td><td>${esc(x.desc||"")}${x.partNo?`<div class="pn">${esc(x.partNo)}</div>`:""}</td><td class="n">${bNumv(x.part)?esc((bNumv(x.qty)||1)+" \u00d7 "+bm(x.part)):""}</td><td class="n">${bNumv(x.body)||""}</td><td class="n">${bNumv(x.refn)||""}</td><td class="n">${bNumv(x.frame)||""}</td><td class="n">${bNumv(x.mech)||""}</td><td class="n">${bNumv(x.sublet)?bm(x.sublet):""}</td></tr>`;
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Estimate ${esc(bNum(j))}</title><link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet"><style>
+      body{font-family:Montserrat,Arial;color:#111;max-width:820px;margin:0 auto;padding:28px;font-size:12.5px}header{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:6px solid #000;padding-bottom:12px}header img{width:220px}
+      .meta{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin:16px 0}.k{color:#686868;font-size:10px;letter-spacing:.12em;text-transform:uppercase}.mono,.n,.pn{font-family:"JetBrains Mono",monospace}
+      table{width:100%;border-collapse:collapse;margin-top:10px}th{text-align:left;font-size:10px;letter-spacing:.1em;color:#686868;border-bottom:2px solid #000;padding:6px 4px}td{border-bottom:1px solid #ddd;padding:6px 4px;vertical-align:top}.n{text-align:right;white-space:nowrap}.pn{font-size:10.5px;color:#686868}
+      h3{margin:18px 0 0;font-size:13px}.tot{margin:16px 0 0 auto;width:320px}.tot div{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #eee}.tot .big{border-top:2px solid #000;font-weight:600;font-size:15px}
+      button{margin-top:20px;font:600 13px Montserrat;background:#111;color:#fff;border:0;padding:12px 18px}@media print{button{display:none}body{padding:0}}</style></head><body>
+      <header><img src="${LOGO_SVC}" alt="Citea Motors"><div style="text-align:right;font-size:11px;color:#3D3D3D">Citea Motors Collision<br>3274 Palm Parkway, Las Vegas, NV 89104<br>(702) 907-2107</div></header>
+      <h2 style="margin:18px 0 0">Collision estimate <span class="mono">${esc(bNum(j))}</span></h2><div class="k" style="margin-top:4px">${esc(new Date().toLocaleDateString([],{dateStyle:"long"}))}</div>
+      <div class="meta"><div><div class="k">Customer</div>${esc(j.cust_name||"")} ${esc(j.cust_phone||"")}</div><div><div class="k">Vehicle</div>${esc(bCar(j))} ${esc(j.color||"")}<div class="mono">${esc(j.vin||"")}</div></div>
+      ${j.payer!=="customer"?`<div><div class="k">Insurance</div>${esc(j.insurer||"")} \u00b7 Claim <span class="mono">${esc(j.claim_no||"")}</span></div><div><div class="k">Adjuster</div>${esc(j.adjuster||"")} ${esc(j.adjuster_phone||"")}</div>`:""}</div>
+      ${groups.map(g=>{ const ls=(j.estimate||[]).filter(x=>(x.supp||0)===g); return ls.length?`<h3>${g?"Supplement "+g:"Estimate"}</h3><table><thead><tr><th>Op</th><th>Description</th><th class="n">Parts</th><th class="n">Body</th><th class="n">Paint</th><th class="n">Frame</th><th class="n">Mech</th><th class="n">Sublet</th></tr></thead><tbody>${ls.map(row).join("")}</tbody></table>`:""; }).join("")}
+      <div class="tot"><div><span>Parts</span><span class="mono">${bm(T.parts)}</span></div><div><span>Labor</span><span class="mono">${bm(T.laborT)}</span></div><div><span>Paint materials</span><span class="mono">${bm(T.materials)}</span></div>${T.sublet?`<div><span>Sublet</span><span class="mono">${bm(T.sublet)}</span></div>`:""}<div><span>Tax</span><span class="mono">${bm(T.tax)}</span></div><div class="big"><span>Total</span><span class="mono">${bm(T.total)}</span></div>
+      ${j.payer!=="customer"?`<div><span>Your deductible</span><span class="mono">${bm(T.ded)}</span></div><div><span>Insurance pays</span><span class="mono">${bm(T.ins)}</span></div>`:""}</div>
+      <p style="margin-top:22px;font-size:11px;color:#686868">Estimate based on visible damage. Hidden damage found after teardown is added as a supplement and approved before we do it. Parts and paint materials taxed; labor not taxed.</p>
+      <button onclick="print()">Print or save as PDF</button></body></html>`); w.document.close();
+  }
+  function bjParts(j,el){
+    const ps=bdb.parts.filter(p=>p.job_id===j.id).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));
+    el.innerHTML=`<div class="tablewrap"><table class="cb-est"><thead><tr><th>Part</th><th>Part #</th><th>Qty</th><th>Vendor</th><th>Cost $</th><th>Status</th><th>ETA</th><th></th></tr></thead><tbody>
+      ${ps.map(p=>`<tr data-pr="${p.id}"><td><input data-pf="descr" value="${esc(p.descr)}" style="min-width:180px"></td><td><input data-pf="part_no" value="${esc(p.part_no||"")}" class="mono" style="width:120px"></td><td><input data-pf="qty" value="${esc(p.qty)}" class="mono" style="width:50px" inputmode="decimal"></td>
+        <td><input data-pf="vendor" value="${esc(p.vendor||"")}" style="width:120px" placeholder="Dealer, LKQ..."></td><td><input data-pf="cost" value="${esc(p.cost??"")}" class="mono" style="width:80px" inputmode="decimal"></td>
+        <td><select data-pf="status">${B_PSTAT.map(([k,l])=>`<option value="${k}" ${p.status===k?"selected":""}>${l}</option>`).join("")}</select></td><td><input data-pf="eta" type="date" value="${esc(p.eta||"")}" style="width:140px"></td>
+        <td><button class="btn ghost sm" type="button" data-pdel="${p.id}" aria-label="Remove part">\u00d7</button></td></tr>`).join("")||'<tr><td colspan="8" class="muted">No parts yet. Add them here, or use "Make parts list from Replace lines" on the Estimate tab.</td></tr>'}</tbody></table></div>
+      <div class="row" style="gap:8px;margin-top:10px"><button class="btn ghost sm" type="button" id="bpAdd">+ Add part</button><span class="spacer"></span><span class="muted" id="bpMsg" style="font-size:12.5px">Changes save as you go.</span></div>`;
+    el.querySelectorAll("[data-pr]").forEach(tr=>{ const p=ps.find(x=>x.id===tr.dataset.pr);
+      tr.querySelectorAll("[data-pf]").forEach(i=>i.onchange=async()=>{ const k=i.dataset.pf; let v=i.value.trim(); if(["qty","cost"].includes(k)) v=v===""?null:bNumv(v); if(k==="eta") v=v||null;
+        const patch={[k]:v,updated_at:new Date().toISOString()}; if(k==="status"){ if(v==="ordered"&&!p.ordered_at) patch.ordered_at=new Date().toISOString(); if(v==="received"&&!p.received_at) patch.received_at=new Date().toISOString(); }
+        const {error}=await sb.from("body_parts").update(patch).eq("id",p.id); if(error){ toast("Not saved: "+error.message); return; } Object.assign(p,patch); $("#bpMsg").textContent="Saved";
+        if(k==="status"){ bLog(j,"part",`${p.descr}: ${B_PSTAT.find(x=>x[0]===v)[1]}`); bodyJobView(j); } }); });
+    el.querySelectorAll("[data-pdel]").forEach(b=>b.onclick=async()=>{ const p=ps.find(x=>x.id===b.dataset.pdel); if(!confirm(`Remove ${p.descr} from the parts list?`)) return;
+      const {error}=await sb.from("body_parts").delete().eq("id",p.id); if(error){ toast("Not removed: "+error.message); return; } bdb.parts=bdb.parts.filter(x=>x.id!==p.id); bodyJobView(j); });
+    el.querySelector("#bpAdd").onclick=async()=>{ const {data,error}=await sb.from("body_parts").insert({job_id:j.id,descr:"New part"}).select().single(); if(error){ toast("Not added: "+error.message); return; } bdb.parts.push(data); bodyJobView(j); const ins=$("#view").querySelectorAll('[data-pf="descr"]'); if(ins.length){ ins[ins.length-1].select(); } };
+  }
+  async function bodyPhotoList(j){ const {data}=await sb.from("body_photos").select("*").eq("job_id",j.id).order("created_at"); const rows=data||[];
+    if(!rows.length) return []; const {data:urls}=await sb.storage.from("body-photos").createSignedUrls(rows.map(r=>r.path),3600);
+    return rows.map((r,i)=>({...r,url:(urls&&urls[i]&&urls[i].signedUrl)||""})); }
+  async function bodyUpload(j,files,stage,msgEl){
+    let n=0; for(const f of files){ if(msgEl) msgEl.textContent=`Uploading ${++n} of ${files.length}\u2026`;
+      const blob=await dataUrlToBlob(await shrinkImage(f,1600,0.82)), path=`${j.id}/${stage||"other"}-${uid()}.jpg`;
+      const up=await sb.storage.from("body-photos").upload(path,blob,{contentType:"image/jpeg"}); if(up.error) throw up.error;
+      const ins=await sb.from("body_photos").insert({job_id:j.id,stage:stage||null,path,taken_by:me.id}); if(ins.error) throw ins.error; }
+  }
+  function bjPhotos(j,el){
+    el.innerHTML='<div class="muted">Loading photos\u2026</div>';
+    bodyPhotoList(j).then(ps=>{
+      const order=[...B_STAGES.map(([k])=>k),null];
+      const by=order.map(k=>[k,ps.filter(p=>(p.stage||null)===k)]).filter(([,xs])=>xs.length);
+      el.innerHTML=`<div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px"><label style="margin:0">Stage</label><select id="bphS" style="width:auto">${B_STAGES.map(([k,l])=>`<option value="${k}" ${k===j.stage?"selected":""}>${l}</option>`).join("")}</select>
+        <label class="btn sm" style="margin:0;cursor:pointer">+ Add photos<input type="file" id="bphF" accept="image/*" multiple hidden></label><span class="muted" id="bphM" style="font-size:12.5px"></span></div>
+        ${by.length?by.map(([k,xs])=>`<h3 style="margin:14px 0 6px">${esc(B_ST[k]||"Other")} <span class="muted" style="font-weight:400">${xs.length}</span></h3><div class="cb-ph">${xs.map(p=>`<button type="button" data-ph="${p.id}" style="background-image:url('${esc(p.url)}')" aria-label="Open photo"></button>`).join("")}</div>`).join(""):'<div class="empty">No photos yet. Take photos of the damage before anything is removed.</div>'}`;
+      el.querySelector("#bphF").onchange=async e=>{ const fs=[...e.target.files]; if(!fs.length) return; try{ await bodyUpload(j,fs,el.querySelector("#bphS").value,el.querySelector("#bphM")); toast("Photos added"); bjPhotos(j,el); }catch(err){ toast("Upload failed: "+(err.message||err)); el.querySelector("#bphM").textContent=""; } };
+      const flat=by.flatMap(([,xs])=>xs);
+      el.querySelectorAll("[data-ph]").forEach(b=>b.onclick=()=>lightbox(flat.map(p=>p.url),flat.findIndex(p=>p.id===b.dataset.ph)));
+    }).catch(e=>{ el.innerHTML=`<div class="empty">Couldn't load photos: ${esc(e.message||e)}</div>`; });
+  }
+  function bjActivity(j,el){
+    const ts=bdb.time.filter(t=>t.job_id===j.id), hrs=t=>((t.end_at?new Date(t.end_at):new Date())-new Date(t.start_at))/36e5;
+    const byU={}; ts.forEach(t=>{ const k=t.user_id+"|"+(t.stage||""); byU[k]=(byU[k]||0)+hrs(t); });
+    const T=bTotals(j), est={body:T.h.body+T.h.frame+T.h.mech,paint:T.h.refn};
+    const spent={body:ts.filter(t=>["teardown","body","reassembly"].includes(t.stage)).reduce((a,t)=>a+hrs(t),0),paint:ts.filter(t=>["prep","paint","detail"].includes(t.stage)).reduce((a,t)=>a+hrs(t),0)};
+    el.innerHTML=`<div class="cb-grid"><div><h3>Hours: estimate vs. actual</h3><div class="tablewrap"><table><thead><tr><th></th><th class="num">Estimate</th><th class="num">Clocked on job</th></tr></thead><tbody>
+        <tr><td>Body, frame &amp; mech (teardown, body, reassembly)</td><td class="num mono">${est.body.toFixed(1)}</td><td class="num mono">${spent.body.toFixed(1)}</td></tr>
+        <tr><td>Paint (prep, paint, detail)</td><td class="num mono">${est.paint.toFixed(1)}</td><td class="num mono">${spent.paint.toFixed(1)}</td></tr></tbody></table></div>
+        <h3 style="margin-top:16px">By person</h3>${Object.keys(byU).length?`<div class="tablewrap"><table><tbody>${Object.entries(byU).map(([k,h])=>{ const [u,s]=k.split("|"); return `<tr><td>${esc((bUser(u)||{}).name||"Someone")}</td><td>${esc(B_ST[s]||s||"")}</td><td class="num mono">${h.toFixed(2)} hr</td></tr>`; }).join("")}</tbody></table></div>`:'<div class="muted">Nobody has clocked time on this job yet. Body techs start the timer on their "My body jobs" page.</div>'}</div>
+      <div><h3>Activity</h3><div id="bjEv" class="muted">Loading\u2026</div></div></div>`;
+    sb.from("body_events").select("*").eq("job_id",j.id).order("at",{ascending:false}).limit(200).then(({data})=>{ const e=el.querySelector("#bjEv"); if(!e) return;
+      const nice=d=>String(d||"").replace(/\b(estimate|approval|parts|teardown|body|prep|paint|reassembly|detail|qc|ready|delivered|cancelled)\b/g,k=>B_ST[k]||(k==="cancelled"?"Cancelled":k));
+      e.innerHTML=(data||[]).map(x=>`<div class="cb-ev"><span class="mono">${esc(new Date(x.at).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}))}</span> ${esc((bUser(x.user_id)||{}).name||"")} \u00b7 ${esc(x.kind==="stage"?"Moved: "+nice(x.detail):x.kind==="hold"?"On hold"+(x.detail?": "+x.detail:""):x.kind==="unhold"?"Off hold":x.detail||x.kind)}</div>`).join("")||"Nothing yet."; });
+  }
+  /* body technicians: their jobs, timer, checklist, photos, pass to the next stage */
+  function viewBodyJobs(){
+    if(!bdb.jobs){ $("#view").innerHTML='<div class="card"><div class="empty">Loading\u2026</div></div>'; loadBody().then(()=>{ if(tab==="bodyjobs") viewBodyJobs(); }).catch(e=>{ $("#view").innerHTML=`<div class="card"><div class="empty">Couldn't load your jobs: ${esc(e.message||e)}</div></div>`; }); return; }
+    const mine=bdb.jobs.filter(j=>[j.body_tech,j.painter,j.prep_tech].includes(me.id)&&!["delivered","cancelled"].includes(j.stage));
+    const isMineNow=j=>B_FLOOR.includes(j.stage)&&j[B_WHO[j.stage]]===me.id;
+    const now=mine.filter(isMineNow), later=mine.filter(j=>!isMineNow(j));
+    const running=bdb.time.find(t=>t.user_id===me.id&&!t.end_at);
+    const open=viewBodyJobs.open&&mine.find(j=>j.id===viewBodyJobs.open);
+    if(open) return bodyTechJob(open,running);
+    const card=j=>{ const pi=bPartsInfo(j.id), r=running&&running.job_id===j.id;
+      return `<button type="button" class="cb-card big ${j.on_hold?"hold":""}" data-tj="${j.id}"><div class="row" style="gap:6px"><span class="mono" style="font-size:12px">${esc(bNum(j))}</span>${j.priority==="rush"?'<span class="pill red">Rush</span>':""}${r?'<span class="pill green">Timer running</span>':""}<span class="spacer"></span><span class="pill">${esc(B_ST[j.stage])}</span></div>
+        <b style="font-size:16px">${esc(bCar(j))}</b><div class="muted" style="font-size:13px">${esc(j.color||"")}${j.paint_code?` \u00b7 paint ${esc(j.paint_code)}`:""}</div>
+        ${pi.n?`<div class="muted" style="font-size:12.5px;margin-top:4px">Parts in: ${pi.inn} of ${pi.n}${pi.back?" \u00b7 back-ordered":""}</div>`:""}${j.on_hold?`<div class="pill red" style="margin-top:6px">On hold${j.hold_reason?": "+esc(j.hold_reason):""}</div>`:""}</button>`; };
+    $("#view").innerHTML=`<div class="card"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">My body jobs</h2><span class="spacer"></span><button class="btn ghost sm" type="button" id="tbRef">Refresh</button></div>
+      <h3 style="margin:6px 0 8px">Your turn now <span class="muted" style="font-weight:400">${now.length}</span></h3>${now.length?`<div class="cb-list">${now.map(card).join("")}</div>`:'<div class="empty">Nothing waiting on you right now.</div>'}
+      ${later.length?`<h3 style="margin:18px 0 8px">Coming up</h3><div class="cb-list">${later.map(card).join("")}</div>`:""}</div>`;
+    $("#tbRef").onclick=()=>{ bdb.jobs=null; viewBodyJobs(); };
+    $("#view").querySelectorAll("[data-tj]").forEach(b=>b.onclick=()=>{ viewBodyJobs.open=b.dataset.tj; viewBodyJobs(); window.scrollTo(0,0); });
+  }
+  function bodyTechJob(j,running){
+    const st=j.stage, myTurn=B_FLOOR.includes(st)&&j[B_WHO[st]]===me.id, list=B_CHECKS[st]||[], ck=(j.checks||{})[st]||{};
+    const nextK=B_FLOOR[B_FLOOR.indexOf(st)+1]||"ready", runHere=running&&running.job_id===j.id, runElse=running&&running.job_id!==j.id;
+    const pi=bdb.parts.filter(p=>p.job_id===j.id&&!["cancelled","returned"].includes(p.status));
+    const lines=(j.estimate||[]).filter(x=>x.desc);
+    const hrsFor=x=>({teardown:["body","frame","mech"],body:["body","frame"],reassembly:["body","mech"],prep:["refn"],paint:["refn"],detail:["refn"],qc:["body","refn"]}[st]||["body","refn"]).map(k=>bNumv(x[k])).reduce((a,b)=>a+b,0);
+    $("#view").innerHTML=`<div class="card"><div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn ghost sm" type="button" id="tjBack">\u2039 My body jobs</button><span class="spacer"></span><span class="pill">${esc(B_ST[st])}</span></div>
+      <h2 style="margin:12px 0 2px">${esc(bNum(j))} \u00b7 ${esc(bCar(j))}</h2><div class="muted">${esc([j.color,j.paint_code?"paint "+j.paint_code:"",j.vin].filter(Boolean).join(" \u00b7 "))}</div>
+      ${j.on_hold?`<div class="cb-warn" style="margin-top:10px">On hold${j.hold_reason?": "+esc(j.hold_reason):""}. Check with the manager before working on it.</div>`:""}
+      ${j.notes?`<div class="cb-note"><b>Notes:</b> ${esc(j.notes)}</div>`:""}
+      <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:14px">${runHere?`<button class="btn" type="button" id="tjStop">Stop timer</button><span class="muted">Running since ${esc(new Date(running.start_at||Date.now()).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"}))}</span>`
+        :`<button class="btn" type="button" id="tjStart" ${myTurn?"":"disabled"}>Start timer</button>${runElse?'<span class="muted">Starting this stops your timer on the other job.</span>':""}`}
+        <label class="btn ghost" style="margin:0;cursor:pointer">+ Photos<input type="file" id="tjPh" accept="image/*" capture="environment" multiple hidden></label><span class="muted" id="tjMsg"></span></div>
+      ${myTurn?`<h3 style="margin:18px 0 6px">${esc(B_ST[st])} checklist</h3><div class="cb-checks">${list.map((x,i)=>`<label><input type="checkbox" data-ck="${i}" ${ck[i]?"checked":""}> ${esc(x)}</label>`).join("")}</div>
+        <button class="btn" type="button" id="tjDone" style="margin-top:12px;width:100%">Done with ${esc(B_ST[st].toLowerCase())} \u2192 send to ${esc((B_ST[nextK]||"").toLowerCase())}</button>`
+        :`<div class="cb-note" style="margin-top:14px">This car is in ${esc(B_ST[st].toLowerCase())}${B_FLOOR.includes(st)&&j[B_WHO[st]]?" with "+esc((bUser(j[B_WHO[st]])||{}).name||"someone"):""}. It will show under "Your turn now" when it's yours.</div>`}
+      <h3 style="margin:20px 0 6px">What the estimate covers</h3>${lines.length?`<div class="tablewrap"><table><thead><tr><th>Op</th><th>Line</th><th class="num">Hours</th></tr></thead><tbody>${lines.map(x=>`<tr${x.supp?' class="cb-supp"':""}><td class="mono">${esc(x.op||"")}</td><td>${esc(x.desc)}${x.supp?` <span class="muted">(supplement ${x.supp})</span>`:""}</td><td class="num mono">${hrsFor(x)||""}</td></tr>`).join("")}</tbody></table></div>`:'<div class="muted">No estimate lines yet.</div>'}
+      ${pi.length?`<h3 style="margin:20px 0 6px">Parts</h3><div class="tablewrap"><table><tbody>${pi.map(p=>`<tr><td>${esc(p.descr)}</td><td class="mono muted">${esc(p.part_no||"")}</td><td><span class="pill ${["received","installed"].includes(p.status)?"green":p.status==="backordered"?"red":""}">${esc((B_PSTAT.find(x=>x[0]===p.status)||[])[1]||p.status)}</span></td></tr>`).join("")}</tbody></table></div>`:""}
+      ${j.damage?`<h3 style="margin:20px 0 6px">Damage</h3><p style="margin:0">${esc(j.damage)}</p>`:""}</div>`;
+    $("#tjBack").onclick=()=>{ viewBodyJobs.open=null; viewBodyJobs(); };
+    const stopRun=async()=>{ const r=bdb.time.find(t=>t.user_id===me.id&&!t.end_at); if(!r) return true; const end=new Date().toISOString();
+      const {error}=await sb.from("body_time").update({end_at:end}).eq("id",r.id); if(error){ toast("Timer not stopped: "+error.message); return false; } r.end_at=end; return true; };
+    const sb1=$("#tjStart"); if(sb1) sb1.onclick=async()=>{ if(!(await stopRun())) return; const {data,error}=await sb.from("body_time").insert({job_id:j.id,user_id:me.id,stage:st}).select().single();
+      if(error){ toast("Timer not started: "+error.message); return; } bdb.time.push(data); toast("Timer started"); bodyTechJob(j,data); };
+    const sb2=$("#tjStop"); if(sb2) sb2.onclick=async()=>{ if(await stopRun()){ toast("Timer stopped"); bodyTechJob(j,null); } };
+    $("#tjPh").onchange=async e=>{ const fs=[...e.target.files]; if(!fs.length) return; try{ await bodyUpload(j,fs,st,$("#tjMsg")); $("#tjMsg").textContent=`${fs.length} photo${fs.length===1?"":"s"} added`; toast("Photos added"); }catch(err){ toast("Upload failed: "+(err.message||err)); $("#tjMsg").textContent=""; } };
+    $("#view").querySelectorAll("[data-ck]").forEach(c=>c.onchange=async()=>{ const v={...ck,[c.dataset.ck]:c.checked}; const {data,error}=await sb.rpc("body_tech_update",{p_id:j.id,p_checks:{[st]:v},p_next:null});
+      const err=error?error.message:(data&&data.error); if(err){ c.checked=!c.checked; toast("Not saved: "+err); return; } j.checks={...(j.checks||{}),[st]:v}; Object.assign(ck,v); });
+    const dn=$("#tjDone"); if(dn) dn.onclick=async()=>{ const left=list.filter((x,i)=>!ck[i]).length;
+      if(left&&!confirm(`${left} checklist item${left===1?" isn't":"s aren't"} ticked. Send it to ${B_ST[nextK].toLowerCase()} anyway?`)) return;
+      dn.disabled=true; const {data,error}=await sb.rpc("body_tech_update",{p_id:j.id,p_checks:null,p_next:nextK}); const err=error?error.message:(data&&data.error);
+      if(err){ dn.disabled=false; toast("Not moved: "+({not_your_job:"this job isn't assigned to you",bad_stage:"the job moved; refresh",stage_locked:"a manager has to move it"}[err]||err)); return; }
+      bdb.time.filter(t=>t.job_id===j.id&&!t.end_at).forEach(t=>t.end_at=new Date().toISOString()); j.stage=nextK; j.stage_at=new Date().toISOString();
+      toast(`Sent to ${B_ST[nextK].toLowerCase()}`); viewBodyJobs.open=null; viewBodyJobs(); };
   }
 
   /* ---------- training ---------- */
