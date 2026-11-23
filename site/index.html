@@ -725,6 +725,19 @@
   .member-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px} .member-grid .card{margin:0}
   @media (max-width:800px){ .member-grid{grid-template-columns:1fr} }
   .ts-punch{margin-left:6px;padding:3px 8px;font-size:11.5px} .ts-punch.out{border-color:var(--red,#C8201F);color:var(--red,#C8201F)}
+  .ws-last{font-size:12.5px;color:var(--steel,#686868);margin:2px 0 6px;line-height:1.4}.ws-last b{font-weight:700}
+  .ws-last .lv-repair,.ws-last .lv-issue{color:#C8201F}.ws-last .lv-watch{color:#B07A00}.ws-last .lv-ok{color:#2E7D32}
+  .hist-btn{display:flex;align-items:center;gap:10px;width:100%;margin:0 0 14px;padding:12px 14px;border:1px solid var(--hairline);border-left:4px solid #D9A400;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+  .hist-btn b{font-size:14px}.hist-btn span{flex:1;font-size:13px;color:var(--steel,#686868)}.hist-btn i{font-style:normal;font-size:20px}
+  .hist-wrap{position:fixed;inset:0;z-index:300}.hist-bg{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+  .hist-panel{position:absolute;top:0;right:0;bottom:0;width:min(460px,100%);background:var(--bg,#F4F4F2);display:flex;flex-direction:column;box-shadow:-8px 0 30px rgba(0,0,0,.25)}
+  .hist-top{display:flex;align-items:center;gap:12px;padding:16px;border-bottom:1px solid var(--hairline);background:var(--surface)}.hist-top>div{flex:1}.hist-top .muted{font-size:12.5px}
+  .hist-body{flex:1;overflow:auto;padding:12px 16px 40px;-webkit-overflow-scrolling:touch}
+  .hv-visit{background:var(--surface);border:1px solid var(--hairline);margin-bottom:12px;padding:0 14px}
+  .hv-visit>summary{padding:12px 0;cursor:pointer;font-size:14px}.hv-visit>summary .muted{font-size:12.5px;margin-top:2px}
+  .hv-sec{border-top:1px solid var(--hairline);padding:10px 0}.hv-st{font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
+  .hv-row{display:flex;gap:8px;align-items:flex-start;font-size:13.5px;margin:6px 0}.hv-row .pill{flex:none}.hv-f{color:var(--steel,#686868);font-size:13px;margin-top:2px}
+  .hv-ok summary{font-size:12.5px;color:var(--steel,#686868);cursor:pointer;margin-top:4px}.hv-notes{font-size:13.5px;white-space:pre-wrap}
   .prior-find{margin:10px 0 12px;padding:10px 12px;border-left:3px solid #d29b00;background:var(--sub)}
   .prior-find .pf-h{font:600 11px var(--sans);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
   .prior-find .pf-row{font-size:13px;line-height:1.45;margin:4px 0} .prior-find .muted{font-size:12px}
@@ -1437,7 +1450,7 @@
       ORDER.forEach((k,i)=>{ const tb=SPEC[k].table, ids=new Set(rows[i].map(r=>r.id));
         rows[i].forEach(r=>applyRemote({table:tb,eventType:"UPDATE",new:r}));
         [...((snap[k]||new Map()).keys())].filter(id=>!ids.has(id)).forEach(id=>applyRemote({table:tb,eventType:"DELETE",old:{id}})); });
-      try{ (await fetchAll("worksheets")).forEach(r=>{ const cur=(db.worksheets||{})[r.wo_id]; if(!cur||JSON.stringify(cur.data)!==JSON.stringify(r.data)) applyRemote({table:"worksheets",eventType:"UPDATE",new:r}); }); }catch(e){}
+      try{ (await fetchAll("worksheets")).forEach(r=>{ const cur=(db.worksheets||{})[r.wo_id]; if(!cur||canonJ(cur.data)!==canonJ(r.data)) applyRemote({table:"worksheets",eventType:"UPDATE",new:r}); }); }catch(e){}
       try{ db.estimates=await fetchAll("estimate_requests"); }catch(e){}
       if(me.role==="manager"){
         try{ db.payments=await fetchAll("payments"); }catch(e){}
@@ -2247,9 +2260,9 @@
     if(wo){ viewJobDetail.tab=tabT; viewJobDetail.tabFor=j.id; } // stay on this tab while working through it;
     $("#view").innerHTML = `${clockBarHTML()}
       <div class="tjd-bar"><div class="tjd-row"><button class="btn ghost sm" id="tjBack" type="button">\u2039 My jobs</button><span class="tjd-bar-t">${esc(vehOf(j)||j.title||"")}</span>${wo?`<span class="pill ${pct>=100?"green":"prog"}" id="wsPctPill">${pct}% done</span>`:""}</div>
-        ${wo?`<div class="tjd-tabs t3"><button type="button" data-tjt="pre" class="${tabT==="pre"?"on":""}">Pre-repair <small class="${preOK?"ok":"need"}">${preN}/${preT}</small></button><button type="button" data-tjt="rep" class="${tabT==="rep"?"on":""}">Repair <small class="${allDone?"ok":"need"}">${groups.filter(gDone).length}/${groups.length}</small></button><button type="button" data-tjt="post" class="${tabT==="post"?"on":""}">Post-repair <small class="${postOK?"ok":"need"}">${postN}/${postT}</small></button></div>`:""}</div>
+        ${wo?`<div class="tjd-tabs t3"><button type="button" data-tjt="pre" class="${tabT==="pre"?"on":""}">Pre-repair <small class="${preOK?"ok":"need"}">${preN}/${preT}</small></button><button type="button" data-tjt="rep" class="${tabT==="rep"?"on":""}">Repair <small class="${allDone?"ok":"need"}">${groups.filter(gDone).length}/${groups.length}</small></button><button type="button" data-tjt="post" class="${tabT==="post"?"on":""}">Post-repair <small class="${postOK?"ok":"need"}">${postN}/${postT}</small></button></div>${histBtn(j)}`:""}</div>
       <div class="ws tjd-wrap">
-      ${tabT==="pre"?stageBar("__pre","Pre-repair inspection",preOK)+preHTML(d,dis)+wsInspHTML(d,dis,j,"pre")+`<div class="tjd-next"><button class="btn ghost" data-tjt="rep" type="button">Go to repair \u203a</button></div>`
+      ${tabT==="pre"?stageBar("__pre","Pre-repair inspection",preOK)+preHTML(d,dis,j)+wsInspHTML(d,dis,j,"pre")+`<div class="tjd-next"><button class="btn ghost" data-tjt="rep" type="button">Go to repair \u203a</button></div>`
       :tabT==="post"?stageBar("__post","Post-repair test drive",postOK)+wsInspHTML(d,dis,j,"post")+`
       <div class="card"><div class="two"><div><label style="margin-top:0">Out odometer <span class="muted" style="text-transform:none;letter-spacing:0">(required)</span></label>${odoBox(`id="wsOdo" class="mono ${odoOK?"fld-ok":"fld-need"}" placeholder="Mileage when done" ${dis}`,d.odo||(isKm(j.mileage)?" km":""))}</div><div></div></div>
         <label>Tech notes</label><textarea id="wsNotes" rows="4" placeholder="Anything the office should know" ${dis}>${esc(d.notes||"")}</textarea>
@@ -5895,6 +5908,41 @@
       if(val.r==="watch"||val.r==="repair") out.push({k,label:names[k]||k,r:val.r,f:String(val.f||"").trim(),at:new Date(v.r.updated_at),wo:v.x,odo:String(v.r.data.odo||"")}); } }
     return out.sort((a,b)=>(a.r==="repair"?0:1)-(b.r==="repair"?0:1));
   }
+  // every earlier visit of this car that has a worksheet, newest first
+  function pastVisits(j){
+    const vin=String(j.vin||"").replace(/\W/g,"").toUpperCase();
+    const same=x=>x.id!==j.id&&isWO(x)&&((j.vehicleId&&x.vehicleId===j.vehicleId)||(vin.length>=11&&String(x.vin||"").replace(/\W/g,"").toUpperCase()===vin));
+    return db.jobs.filter(same).map(x=>({x,r:(db.worksheets||{})[x.id]})).filter(v=>{ const d=v.r&&v.r.data; return d&&(Object.values(d.items||{}).some(i=>i&&(i.r||i.f))||(d.pre&&d.pre.drivable)||d.notes); })
+      .map(v=>({...v,d:v.r.data,at:new Date(v.x.completedAt||v.r.updated_at||doneAt(v.x))})).sort((a,b)=>b.at-a.at);
+  }
+  // what was last checked/written for each item, from the most recent visit that rated it
+  function lastSeen(j){ const out={};
+    for(const v of pastVisits(j)){ for(const [k,x] of Object.entries(v.d.items||{})) if(x&&(x.r||String(x.f||"").trim())&&!out[k]) out[k]={...x,at:v.at,wo:v.x};
+      for(const [k,x] of Object.entries((v.d.pre&&v.d.pre.items)||{})) if(x&&(x.r||String(x.f||"").trim())&&!out["pre:"+k]) out["pre:"+k]={...x,at:v.at,wo:v.x}; }
+    return out; }
+  const RLBL={ok:"OK",watch:"Watch",repair:"Repair",na:"N/A",issue:"Issue"};
+  const shortD=t=>{ const d=new Date(t); return d.toLocaleDateString([],d.getFullYear()===new Date().getFullYear()?{month:"short",day:"numeric"}:{month:"short",day:"numeric",year:"numeric"}); };
+  const lastLine=x=>x?`<div class="ws-last"><span>Last visit ${esc(shortD(x.at))}:</span> <b class="lv-${esc(x.r||"")}">${esc(RLBL[x.r]||"Note")}</b>${String(x.f||"").trim()?` \u2014 ${esc(String(x.f).trim())}`:""}</div>`:"";
+  function histBtn(j){ const n=pastVisits(j).length; if(!n) return "";
+    return `<button type="button" class="hist-btn" data-hist="${j.id}"><b>\ud83d\udd58 Inspection history</b><span>${n} earlier visit${n>1?"s":""} \u00b7 last ${esc(shortD(pastVisits(j)[0].at))}</span><i>\u203a</i></button>`; }
+  function openHistory(j){
+    const vs=pastVisits(j), row=(l,x)=>`<div class="hv-row"><span class="pill ${x.r==="repair"||x.r==="issue"?"red":x.r==="watch"?"amber":x.r==="ok"?"green":""}">${esc(RLBL[x.r]||"Note")}</span><div><b>${esc(l)}</b>${String(x.f||"").trim()?`<div class="hv-f">${esc(String(x.f).trim())}</div>`:""}</div></div>`;
+    const sect=(title,list)=>{ const flag=list.filter(([l,x])=>x.r!=="ok"&&x.r!=="na"||String(x.f||"").trim()), okL=list.filter(y=>!flag.includes(y));
+      return list.length?`<div class="hv-sec"><div class="hv-st">${esc(title)}</div>${flag.map(([l,x])=>row(l,x)).join("")||'<div class="muted" style="font-size:13px">Nothing flagged.</div>'}${okL.length?`<details class="hv-ok"><summary>${okL.length} checked OK / N/A</summary>${okL.map(([l,x])=>row(l,x)).join("")}</details>`:""}</div>`:""; };
+    const body=vs.map((v,i)=>{ const d=v.d, x=v.x, p=d.pre||{}, names=wsGroupsFor(x);
+      const pre=p.drivable==="no"?`<div class="hv-sec"><div class="hv-st">Pre-repair</div><div class="hv-row"><span class="pill red">Not drivable</span><div>${esc(p.why||"")}</div></div></div>`
+        :sect("Pre-repair drive check",PRE_ITEMS.filter(([k])=>p.items&&p.items[k]&&(p.items[k].r||p.items[k].f)).map(([k,l])=>[l,p.items[k]]));
+      const insp=names.map(([g,items])=>sect(g,items.filter(([k])=>d.items&&d.items[k]&&(d.items[k].r||d.items[k].f)).map(([k,l])=>[l,d.items[k]]))).join("");
+      const tech=userName(x.assignee);
+      return `<details class="hv-visit" ${i===0?"open":""}><summary><b>${esc(v.at.toLocaleDateString([],{month:"short",day:"numeric",year:"numeric"}))}</b>${x.number?` \u00b7 #${esc(x.number)}`:""}<div class="muted">${esc(x.title||"")}${tech?` \u00b7 ${esc(tech)}`:""}${String(x.mileage||"").replace(/\D/g,"")?` \u00b7 in ${esc(odoFmt(x.mileage))}`:""}${String(d.odo||"").replace(/\D/g,"")?` \u00b7 out ${esc(odoFmt(d.odo))}`:""}</div></summary>
+        ${pre}${insp}${String(d.notes||"").trim()?`<div class="hv-sec"><div class="hv-st">Tech notes</div><div class="hv-notes">${esc(d.notes)}</div></div>`:""}</details>`; }).join("");
+    const el=document.createElement("div"); el.className="hist-wrap";
+    el.innerHTML=`<div class="hist-bg"></div><aside class="hist-panel" role="dialog" aria-label="Inspection history"><div class="hist-top"><div><b>Inspection history</b><div class="muted">${esc([j.year,j.make,j.model].filter(Boolean).join(" "))} \u00b7 ${vs.length} earlier visit${vs.length>1?"s":""}</div></div><button type="button" class="btn ghost sm" data-hclose>Close</button></div><div class="hist-body">${body||'<div class="muted">No earlier inspections for this car.</div>'}</div></aside>`;
+    const close=()=>{ el.remove(); document.removeEventListener("keydown",esck); }, esck=e=>{ if(e.key==="Escape") close(); };
+    el.querySelector(".hist-bg").onclick=close; el.querySelector("[data-hclose]").onclick=close; document.addEventListener("keydown",esck);
+    document.body.appendChild(el);
+  }
+  document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest("[data-hist]"); if(!b) return; const j=db.jobs.find(x=>x.id===b.dataset.hist); if(j) openHistory(j); });
   function priorHTML(j, compact){
     const pf=priorFindings(j); if(!pf.length) return "";
     return `<div class="prior-find ${compact?"compact":""}"><div class="pf-h">From earlier visits \u00b7 recheck these</div>${pf.map(x=>`<div class="pf-row"><span class="pill ${x.r==="repair"?"red":"amber"}">${x.r==="repair"?"Repair":"Watch"}</span> <b>${esc(x.label)}</b>${x.f?` \u2014 ${esc(x.f)}`:""}
@@ -5958,7 +6006,7 @@
         <dt>Technician</dt><dd>${esc(crewNames(j))}</dd><dt>Service writer</dt><dd>Basir Dur</dd></dl>
         ${keyPhotoOf(j)?`<div class="keyrow"><div class="keyimg"><img src="${keyPhotoOf(j)}" alt="Key photo" id="wsKeyImg"></div><div><div class="kr-t">Key</div><div class="hint" style="margin-top:2px">Tap to enlarge. Make sure this is the key you take.</div></div></div>`:""}</div>
       ${wsPhotos("before","Before photos",ph("before"),can)}
-      ${preHTML(d,dis)}
+      ${histBtn(j)}${preHTML(d,dis,j)}
       ${wsInspHTML(d,dis,j)}
       <div class="card"><h2>Labor</h2>
         ${lab.length?lab.map(l=>`<label class="ws-task ${d.labor[l[4]]?"on":""}"><input type="checkbox" data-wsl="${l[4]}" ${d.labor[l[4]]?"checked":""} ${dis}><span>${esc(l[0])}${l[7]?`<small class="ws-note">${esc(l[7])}</small>`:""}</span><b class="mono">${techHrsOf(l).toFixed(2)}</b></label>`).join(""):'<div class="muted">No labor lines on this work order.</div>'}
@@ -5995,14 +6043,14 @@
   const preDone=d=>{ const p=(d&&d.pre)||{}; return p.drivable==="no"||(p.drivable==="yes"&&PRE_ITEMS.every(([k])=>p.items&&p.items[k]&&p.items[k].r)); };
   const preCount=d=>{ const p=(d&&d.pre)||{}; return p.drivable==="no"?PRE_ITEMS.length:PRE_ITEMS.filter(([k])=>p.items&&p.items[k]&&p.items[k].r).length; };
   function preStamp(d){ const p=preOf(d); if(preDone(d)){ if(!p.at){ p.at=Date.now(); p.by=me.id; } } else { delete p.at; delete p.by; } }
-  function preHTML(d,dis){ const p=(d&&d.pre)||{}, it=p.items||{}, dr=p.drivable||"";
+  function preHTML(d,dis,j){ const p=(d&&d.pre)||{}, it=p.items||{}, dr=p.drivable||"", LS=j?lastSeen(j):{};
     return `<div class="card pre-card"><div class="card-head"><h2>Pre-repair inspection &amp; test drive</h2><span class="spacer"></span>${preDone(d)?'<span class="pill green">Done</span>':'<span class="pill red">Before work starts</span>'}</div>
       <div class="hint" style="margin:-2px 0 10px">Records the car's condition when we received it, before any repairs.</div>
       <div class="pre-q"><b>Is the vehicle drivable?</b><div class="ws-rate pre-yn">${[["yes","Yes"],["no","No"]].map(([v,t])=>`<button type="button" class="r-${v==="yes"?"ok":"repair"} ${dr===v?"on":""}" data-pdr="${v}" ${dis}>${t}</button>`).join("")}</div></div>
       ${dr==="no"?`<div class="pre-waive">Not drivable &#8212; the test drive and every pre-repair check are waived.</div>
         <textarea class="ws-find" data-pwhy rows="2" placeholder="Why can't it be driven? (no-start, towed in, unsafe, no keys\u2026)" ${dis}>${esc(p.why||"")}</textarea>`
       :dr==="yes"?PRE_ITEMS.map(([k,l])=>{ const x=it[k]||{}; return `<div class="ws-item ${x.f?"has-f":""}">
-          <div class="ws-name">${esc(l)}</div>
+          <div class="ws-name">${esc(l)}</div>${lastLine(LS["pre:"+k])}
           <div class="ws-rate">${[["ok","OK"],["issue","Issue"],["na","N/A"]].map(([v,t])=>`<button type="button" class="r-${v==="issue"?"repair":v} ${x.r===v?"on":""}" data-prr="${k}" data-v="${v}" ${dis}>${t}</button>`).join("")}</div>
           <textarea class="ws-find" data-prf="${k}" rows="1" placeholder="What did you notice?" ${dis}>${esc(x.f||"")}</textarea></div>`; }).join("")
       :'<div class="hint">Answer this first. If it isn\u2019t drivable, the test drive checks are skipped.</div>'}
@@ -6054,10 +6102,10 @@
     if(!urls[at]){ toast("Photo still loading \u2014 try again in a second"); return; }
     lightbox(urls.map((u,k)=>u||null).filter(Boolean), urls.slice(0,at).filter(Boolean).length); },true);
   function wsInspHTML(d,dis,j,part){ const it=d.items=d.items||{};
-    const gs=wsGroupsFor(j).filter(([g])=>!part||(part==="post")===/test drive|drive test/i.test(g));
+    const gs=wsGroupsFor(j).filter(([g])=>!part||(part==="post")===/test drive|drive test/i.test(g)), LS=lastSeen(j);
     return `      <div class="card"><h2>${part==="post"?"Post-repair test drive":"General inspection"}</h2>
         ${isEV(j)?'<div class="hint" style="margin:-4px 0 8px">Electric vehicle inspection</div>':""}${part==="post"?"":priorHTML(j)}${gs.map(([g,items])=>`<div class="ws-group">${esc(g)}</div>${items.map(([k,l])=>{ const x=it[k]||{}; return `<div class="ws-item ${x.r?"is-"+x.r:""} ${x.f||(k==="tpress"&&d.tp&&Object.values(d.tp).some(Boolean))?"has-f":""}">
-          <div class="ws-name">${esc(l)}</div>
+          <div class="ws-name">${esc(l)}</div>${lastLine(LS[k])}
           <div class="ws-rate">${[["ok","OK"],["watch","Watch"],["repair","Repair"],["na","N/A"]].map(([v,t])=>`<button type="button" class="r-${v} ${x.r===v?"on":""}" data-wsr="${k}" data-v="${v}" ${dis}>${t}</button>`).join("")}</div>
           <textarea class="ws-find" data-wsf="${k}" rows="1" placeholder="Findings" ${dis}>${esc(x.f||"")}</textarea>${k==="tpress"?tpHTML(d,dis):""}</div>`; }).join("")}`).join("")}
       </div>`; }
