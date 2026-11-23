@@ -633,6 +633,8 @@
   .cb-warn{background:var(--red-tint,#fbeaea);border-left:6px solid var(--red);padding:10px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}.cb-note{background:var(--sub);padding:10px 12px;margin-top:10px;font-size:14px}
   .cb-ph{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:6px}.cb-ph button{aspect-ratio:4/3;border:0;background:var(--sub) center/cover;cursor:zoom-in}
   .cb-ev{padding:6px 0;border-bottom:1px solid var(--hairline);font-size:13px;color:var(--ink)}.cb-ev .mono{color:var(--steel,#686868);font-size:12px;margin-right:6px}
+  .lg-live{display:flex;flex-wrap:wrap;gap:6px}.lg-detail td{background:var(--sub);padding:12px 14px}.lg-sum{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13.5px;margin-bottom:8px}
+  .lg-pages{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}.lg-tl{max-height:260px;overflow:auto;font-size:13px}.lg-tl div{padding:3px 0;border-bottom:1px solid var(--hairline)}.lg-tl .mono{color:var(--steel,#686868);margin-right:8px;font-size:12px}
   .modal{width:100%;max-width:480px;background:var(--surface);border-top:6px solid var(--ink);padding:22px;max-height:90vh;overflow:auto}
   .modal h2{font-size:18px;font-weight:600}
   .modal .row.end{justify-content:flex-end;margin-top:20px}
@@ -1709,6 +1711,7 @@
   function bindLoginForm(){ const f=$("#loginForm"); f.dataset.orig=f.dataset.orig||f.innerHTML; f.dataset.mode="login"; f.onsubmit=doLogin; }
   bindLoginForm();
   async function logout(){
+    if(me) try{ await Promise.race([sb.from("app_activity").insert({user_id:me.id,session_id:actSession,kind:"logout",detail:"",user_agent:navigator.userAgent.slice(0,300)}),new Promise(r=>setTimeout(r,1500))]); }catch(e){}
     loggingOut=true; try{ if(channel) sb.removeChannel(channel); channel=null; await sb.auth.signOut({scope:"local"}); }catch(e){} loggingOut=false; hideSignedOut();
     me=null; lastPw=""; clearInterval(tick); clearInterval(chromeTick); $("#app").classList.add("hidden"); $("#login").classList.remove("hidden"); resetLoginForm(); bindLoginForm();
   }
@@ -1771,12 +1774,13 @@
     leads:'<path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 12h5"/>',
     collision:'<rect x="3" y="4" width="5" height="16"/><rect x="10" y="4" width="5" height="11"/><rect x="17" y="4" width="4" height="7"/>',
     bodyjobs:'<path d="M4 15l2-5h12l2 5"/><rect x="3" y="15" width="18" height="4"/><path d="M9 6l3-3 3 3"/>',
+    logins:'<rect x="4" y="10" width="16" height="11"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v3"/>',
     training:'<rect x="3" y="5" width="18" height="13"/><path d="M10 9v5l4-2.5z"/><path d="M8 21h8"/>',
     team:'<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4.2 4.1-6.5 8-6.5s7 2.3 8 6.5"/>',
     earnings:'<rect x="2" y="6" width="20" height="13"/><circle cx="12" cy="12.5" r="3"/><path d="M6 9.5v6M18 9.5v6"/>'
   };
   const SHORT_TITLES = {wip:"In Progress",forsale:"For Sale",leads:"Leads",collision:"Collision",bodyjobs:"Body Jobs"};
-  const TITLES = {settings:"Settings",wip:"Work in Progress",calendar:"Calendar",board:"Tech Board",customers:"Customers",inventory:"Inventory",timesheets:"Timesheets",reports:"Reports",clock:"Time Clock",jobs:"My Jobs",training:"Training",collision:"Collision Board",bodyjobs:"My Body Jobs",forsale:"Cars for Sale",leads:"Website Leads",team:"Team",earnings:"Earnings"};
+  const TITLES = {settings:"Settings",wip:"Work in Progress",calendar:"Calendar",board:"Tech Board",customers:"Customers",inventory:"Inventory",timesheets:"Timesheets",reports:"Reports",clock:"Time Clock",jobs:"My Jobs",training:"Training",logins:"Logins",collision:"Collision Board",bodyjobs:"My Body Jobs",forsale:"Cars for Sale",leads:"Website Leads",team:"Team",earnings:"Earnings"};
   let chromeTick=null;
 
   const roleLabel=u=>{ const r=roleOfU(u); return r?r.name:u.dbRole==="owner"?"Owner":u.dbRole==="gm"?"Manager":"Technician"; };
@@ -1789,8 +1793,8 @@
     $("#whoInit").textContent=(me.name||"?").slice(0,1).toUpperCase();
     const mgr = me.role==="manager";
     const groups = (mgr
-      ? [["Shop",["wip","calendar","board","customers","inventory","reports"]],["Collision",["collision"]],["Website",["forsale","leads"]],["Team",["timesheets","clock","training","team",...(me.finance?["earnings"]:[])]]]
-      : [["My day",[shopWork(me)==="body"?"bodyjobs":"jobs","clock","training"]]]).map(([g,keys])=>[g,keys.filter(k=>k==="timesheets"||k==="earnings"||canPage(k))]).filter(([g,keys])=>keys.length);
+      ? [["Shop",["wip","calendar","board","customers","inventory","reports"]],["Collision",["collision"]],["Website",["forsale","leads"]],["Team",["timesheets","clock","training","team",...(me.finance?["earnings","logins"]:[])]]]
+      : [["My day",[shopWork(me)==="body"?"bodyjobs":"jobs","clock","training"]]]).map(([g,keys])=>[g,keys.filter(k=>k==="timesheets"||k==="earnings"||k==="logins"||canPage(k))]).filter(([g,keys])=>keys.length);
     $("#tabs").innerHTML = groups.map(([g,keys])=>`<div class="sect">${g}</div>`+keys.map(k=>
       `<button data-tab="${k}"><svg viewBox="0 0 24 24">${ICONS[k]}</svg><span>${TITLES[k]}</span>${k==="leads"?'<span class="count red hidden" id="leadCount"></span>':""}${k==="wip"?'<span class="count" id="wipCount"></span>':""}</button>`).join("")).join("");
     $("#tabs").onclick = e=>{ const b=e.target.closest("button"); if(b){ if(b.dataset.tab==="team") viewTeam.open=null; show(b.dataset.tab); $("#app").classList.remove("nav-open"); } };
@@ -1806,6 +1810,7 @@
     $("#searchBtn").classList.toggle("hidden", false);
     $("#searchBtn").onclick = ()=>{ const tb=document.querySelector(".topbar"); tb.classList.toggle("search-open"); if(tb.classList.contains("search-open")) $("#gq").focus(); };
     bindSearch();
+    actStart();
     web={cars:null,leads:null}; if(me.role==="manager"){ loadWeb().catch(()=>{}); clearInterval(window.__leadT); window.__leadT=setInterval(()=>{ if(document.visibilityState==="visible"&&tab!=="leads") fetchAll("leads","id,status,created_at").then(ls=>{ if(web.leads){ const known=new Set(web.leads.map(x=>x.id)); if(ls.some(x=>!known.has(x.id))){ web.leads=null; loadWeb(); } } }).catch(()=>{}); },120000); }
     clearInterval(chromeTick); chromeTick=setInterval(updateChrome,30000);
     const wm=(location.hash||"").match(/^#ws=(.+)$/), qm=(location.hash||"").match(/^#qbo=(\w+)/);
@@ -1836,8 +1841,8 @@
     document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.tab===t));
     $("#pageTitle").textContent = (innerWidth<=480&&SHORT_TITLES[t])||TITLES[t]||"";
     document.querySelector(".topbar").classList.remove("search-open");
-    ({clock:viewClock,jobs:viewJobs,training:viewTraining,collision:viewCollision,bodyjobs:viewBodyJobs,forsale:viewForSale,leads:viewLeads,board:viewBoard,timesheets:viewTimesheets,team:viewTeam,earnings:viewEarnings,wip:viewWip,customers:viewCustomers,inventory:viewInventory,reports:viewReports,calendar:viewCalendar,settings:viewSettings})[t]();
-    updateChrome(); window.scrollTo(0,0);
+    ({clock:viewClock,jobs:viewJobs,training:viewTraining,logins:viewLogins,collision:viewCollision,bodyjobs:viewBodyJobs,forsale:viewForSale,leads:viewLeads,board:viewBoard,timesheets:viewTimesheets,team:viewTeam,earnings:viewEarnings,wip:viewWip,customers:viewCustomers,inventory:viewInventory,reports:viewReports,calendar:viewCalendar,settings:viewSettings})[t]();
+    updateChrome(); window.scrollTo(0,0); logAct("page",TITLES[t]||t);
   }
 
   /* global search: the whole system (work orders, parts used, customers, vehicles, inventory, appointments, tasks, team, training, reports, pages) */
@@ -2767,6 +2772,71 @@
       if(err){ dn.disabled=false; toast("Not moved: "+({not_your_job:"this job isn't assigned to you",bad_stage:"the job moved; refresh",stage_locked:"a manager has to move it"}[err]||err)); return; }
       bdb.time.filter(t=>t.job_id===j.id&&!t.end_at).forEach(t=>t.end_at=new Date().toISOString()); j.stage=nextK; j.stage_at=new Date().toISOString();
       toast(`Sent to ${B_ST[nextK].toLowerCase()}`); viewBodyJobs.open=null; viewBodyJobs(); };
+  }
+
+  /* ---------- login and activity log (owners only can read it) ---------- */
+  let actSession=null, actLast={k:"",t:0};
+  function logAct(kind,detail){
+    if(!me) return; try{
+      if(kind==="page"&&actLast.k===detail&&Date.now()-actLast.t<60000) return; if(kind==="page") actLast={k:detail,t:Date.now()};
+      sb.from("app_activity").insert({user_id:me.id,session_id:actSession,kind,detail:String(detail||"").slice(0,400),user_agent:navigator.userAgent.slice(0,300)}).then(()=>{},()=>{});
+    }catch(e){}
+  }
+  function actStart(){
+    actSession=Math.random().toString(36).slice(2,10)+Date.now().toString(36); actLast={k:"",t:0};
+    const app=(window.matchMedia&&matchMedia("(display-mode: standalone)").matches)||navigator.standalone;
+    logAct("session",`${deviceOf(navigator.userAgent)}${app?" \u00b7 home-screen app":""} \u00b7 ${screen.width}\u00d7${screen.height}`);
+  }
+  function deviceOf(ua){
+    ua=String(ua||""); if(!ua) return "Unknown device";
+    const os=/iPhone/.test(ua)?"iPhone":/iPad/.test(ua)?"iPad":/Android/.test(ua)?(/Mobile/.test(ua)?"Android phone":"Android tablet"):/Windows/.test(ua)?"Windows PC":/Macintosh|Mac OS X/.test(ua)?"Mac":/CrOS/.test(ua)?"Chromebook":/Linux/.test(ua)?"Linux":"Other";
+    const br=/Edg\//.test(ua)?"Edge":/OPR\//.test(ua)?"Opera":/CriOS|Chrome\//.test(ua)?"Chrome":/FxiOS|Firefox\//.test(ua)?"Firefox":/Safari\//.test(ua)?"Safari":/curl|python|node|Deno/i.test(ua)?"Script":"Browser";
+    return os==="Other"&&br==="Script"?"Not a browser ("+ua.slice(0,30)+")":`${os} \u00b7 ${br}`;
+  }
+  const LOGIN_WHY={wrong_password:"Wrong password",wrong_password_locked:"Wrong password \u00b7 locked out",locked:"Tried while locked",unknown_login:"Unknown username",server:"Server error"};
+  async function viewLogins(){
+    if(!me||!me.finance){ show("wip"); return; }
+    const days=viewLogins.days||7, who=viewLogins.who||"", failed=!!viewLogins.failed;
+    $("#view").innerHTML='<div class="card"><div class="empty">Loading\u2026</div></div>';
+    const since=new Date(Date.now()-days*864e5).toISOString(), recent=new Date(Date.now()-10*60000).toISOString();
+    let q=sb.from("login_events").select("*").gte("at",since).order("at",{ascending:false}).limit(1000); if(who) q=q.eq("user_id",who); if(failed) q=q.eq("ok",false);
+    const [ev,act,lastAct]=await Promise.all([q, sb.from("app_activity").select("user_id,at,kind,detail").gte("at",recent).order("at",{ascending:false}).limit(500),
+      sb.from("app_activity").select("user_id,at").gte("at",since).order("at",{ascending:false}).limit(3000)]);
+    if(ev.error){ $("#view").innerHTML=`<div class="card"><div class="empty">Couldn't load logins: ${esc(ev.error.message)}</div></div>`; return; }
+    const users=(db.allUsers||db.users||[]), nm=id=>(users.find(u=>u.id===id)||{}).name;
+    const live={}; (act.data||[]).forEach(a=>{ if(!live[a.user_id]) live[a.user_id]=a; });
+    const lastSeen={}; (lastAct.data||[]).forEach(a=>{ if(!lastSeen[a.user_id]) lastSeen[a.user_id]=a.at; });
+    const rows=ev.data||[], when=t=>new Date(t).toLocaleString([],{weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
+    const fails=rows.filter(r=>!r.ok).length;
+    $("#view").innerHTML=`<div class="card"><div class="row" style="gap:8px;flex-wrap:wrap;margin-bottom:10px"><h2 style="margin:0">Logins</h2><span class="spacer"></span>
+        <select id="lgWho" style="width:auto"><option value="">Everyone</option>${users.filter(u=>u.active!==false).sort((a,b)=>a.name.localeCompare(b.name)).map(u=>`<option value="${u.id}" ${u.id===who?"selected":""}>${esc(u.name)}</option>`).join("")}</select>
+        <select id="lgDays" style="width:auto">${[[1,"Today"],[7,"Last 7 days"],[30,"Last 30 days"],[90,"Last 90 days"]].map(([d,l])=>`<option value="${d}" ${d===days?"selected":""}>${l}</option>`).join("")}</select>
+        <label class="chk" style="margin:0"><input type="checkbox" id="lgFail" ${failed?"checked":""}><span>Failed only</span></label><button class="btn ghost sm" type="button" id="lgRef">Refresh</button></div>
+      <h3 style="margin:4px 0 8px">Active now</h3><div class="lg-live">${Object.keys(live).length?Object.entries(live).map(([u,a])=>`<span class="pill green">${esc(nm(u)||"Someone")} \u00b7 ${esc(a.kind==="page"?a.detail:a.kind==="session"?"just logged in":a.kind)}</span>`).join(" "):'<span class="muted">Nobody in the last 10 minutes.</span>'}</div>
+      <div class="muted" style="font-size:12.5px;margin:12px 0 8px">${rows.length} login attempt${rows.length===1?"":"s"}${fails?` \u00b7 <b style="color:var(--red)">${fails} failed</b>`:""}. Tap a login to see what they did.</div>
+      <div class="tablewrap"><table><thead><tr><th>When</th><th>Who</th><th>Result</th><th>Device</th><th>IP address</th></tr></thead><tbody>
+      ${rows.map(r=>`<tr class="${r.ok?"clickable":""}" data-lg="${r.id}"><td style="white-space:nowrap">${esc(when(r.at))}</td><td><b>${esc(nm(r.user_id)||r.login||"")}</b>${r.user_id?"":` <span class="muted mono">${esc(r.login||"")}</span>`}</td>
+        <td>${r.ok?'<span class="pill green">Logged in</span>':`<span class="pill red">${esc(LOGIN_WHY[r.reason]||r.reason||"Failed")}</span>`}</td><td>${esc(deviceOf(r.user_agent))}</td><td class="mono" style="font-size:12.5px">${esc(r.ip||"")}</td></tr>
+        <tr class="lg-detail hidden" id="lgd${r.id}"><td colspan="5"></td></tr>`).join("")||'<tr><td colspan="5" class="muted">No logins in this period.</td></tr>'}</tbody></table></div>
+      <h3 style="margin:18px 0 8px">Last seen</h3><div class="tablewrap"><table><tbody>${users.filter(u=>u.active!==false).sort((a,b)=>String(lastSeen[b.id]||"").localeCompare(String(lastSeen[a.id]||""))).map(u=>`<tr><td><b>${esc(u.name)}</b></td><td>${lastSeen[u.id]?esc(when(lastSeen[u.id])):'<span class="muted">Not in this period</span>'}</td></tr>`).join("")}</tbody></table></div>
+      <div class="hint">Only owners can see this page. Logins are recorded by the login server; page visits are recorded by the portal on each device.</div></div>`;
+    $("#lgWho").onchange=e=>{ viewLogins.who=e.target.value; viewLogins(); };
+    $("#lgDays").onchange=e=>{ viewLogins.days=+e.target.value; viewLogins(); };
+    $("#lgFail").onchange=e=>{ viewLogins.failed=e.target.checked; viewLogins(); };
+    $("#lgRef").onclick=()=>viewLogins();
+    $("#view").querySelectorAll("tr[data-lg]").forEach(tr=>tr.onclick=async()=>{ const r=rows.find(x=>String(x.id)===tr.dataset.lg); if(!r||!r.ok) return; const d=$("#lgd"+r.id); if(!d.classList.contains("hidden")){ d.classList.add("hidden"); return; }
+      d.classList.remove("hidden"); const td=d.firstElementChild; td.innerHTML='<span class="muted">Loading\u2026</span>';
+      const next=rows.filter(x=>x.ok&&x.user_id===r.user_id&&x.at>r.at).sort((a,b)=>a.at.localeCompare(b.at))[0];
+      const end=next?next.at:new Date(new Date(r.at).getTime()+24*36e5).toISOString();
+      const {data,error}=await sb.from("app_activity").select("*").eq("user_id",r.user_id).gte("at",new Date(new Date(r.at).getTime()-60000).toISOString()).lt("at",end).order("at").limit(500);
+      if(error){ td.innerHTML=`<span class="muted">Couldn't load: ${esc(error.message)}</span>`; return; }
+      const xs=data||[], t=x=>new Date(x.at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
+      const lastAt=xs.length?xs[xs.length-1].at:r.at, mins=Math.max(1,Math.round((new Date(lastAt)-new Date(r.at))/60000)), out=xs.find(x=>x.kind==="logout");
+      const pages={}; xs.filter(x=>x.kind==="page").forEach(x=>pages[x.detail]=(pages[x.detail]||0)+1);
+      td.innerHTML=xs.length?`<div class="lg-sum"><span><b>${mins>=60?Math.floor(mins/60)+" hr "+(mins%60)+" min":mins+" min"}</b> active</span><span>${out?"Logged out at "+esc(t(out)):"Didn't log out"+(next?"":" (still signed in or closed the app)")}</span>${(xs.find(x=>x.kind==="session")||{}).detail?`<span>${esc(xs.find(x=>x.kind==="session").detail)}</span>`:""}</div>
+        <div class="lg-pages">${Object.entries(pages).sort((a,b)=>b[1]-a[1]).map(([p,n])=>`<span class="pill">${esc(p)} \u00d7${n}</span>`).join(" ")}</div>
+        <div class="lg-tl">${xs.map(x=>`<div><span class="mono">${esc(t(x))}</span> ${esc(x.kind==="page"?"Opened "+x.detail:x.kind==="session"?"Started: "+x.detail:x.kind==="logout"?"Logged out":x.detail||x.kind)}</div>`).join("")}</div>`
+        :'<span class="muted">No page activity recorded for this login. (Activity tracking started Nov 22, 2026.)</span>'; });
   }
 
   /* ---------- training ---------- */
