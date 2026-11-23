@@ -84,6 +84,12 @@
   input[type=text]:focus{border-color:var(--ink)}
   .sigbox{position:relative;border:1px solid var(--hairline);background:var(--surface);height:170px;touch-action:none}
   .sigbox.on{border-color:var(--ink)}
+  /* required boxes: red until filled in, green once done */
+  .req{border:2px solid #C8201F!important;background:#FDF3F3!important}
+  .req.done{border-color:#2E7D32!important;background:#F2F8F3!important}
+  label.agree.req{padding:12px}
+  .req-tag{display:inline-block;margin-left:6px;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#C8201F}
+  .req-tag.done{color:#2E7D32}
   canvas{display:block;width:100%;height:100%}
   .sigline{position:absolute;left:16px;right:16px;bottom:38px;border-bottom:1px solid var(--hairline);pointer-events:none}
   .sigx{position:absolute;left:16px;bottom:42px;font-size:18px;color:var(--steel);pointer-events:none}
@@ -308,14 +314,14 @@
       <section><div class="card sum" id="sum"></div></section>
       <h2>Authorize &amp; sign</h2>
       <section><div class="card">
-        <label for="name" style="margin-top:0">Your full name</label><input type="text" id="name" autocomplete="off" autocapitalize="words" placeholder="${esc(s.customer||"First and last name")}">
-        <div class="name-hint" style="margin-top:8px;font-size:15px;line-height:1.4;font-weight:700;color:#111">${s.customer?"Type your name exactly as shown in grey.":"Type your first and last name exactly as Citea Motors has it on file."}</div>
-        <label>Signature</label>
-        <div class="sigbox" id="sigbox"><canvas id="sig"></canvas><div class="sigline"></div><div class="sigx">\u00d7</div>
+        <label for="name" style="margin-top:0">Your full name <span class="req-tag" data-rq="name">Required</span></label><input type="text" id="name" class="req" autocomplete="off" autocapitalize="words" placeholder="${esc(s.customer||"First and last name")}">
+        <div class="name-hint" style="margin-top:8px;font-size:15px;line-height:1.4;font-weight:700;color:#111">Type your first and last name.</div>
+        <label>Signature <span class="req-tag" data-rq="sig">Required</span></label>
+        <div class="sigbox req" id="sigbox"><canvas id="sig"></canvas><div class="sigline"></div><div class="sigx">\u00d7</div>
           <div class="sighint" id="sighint">Sign here with your finger</div><button class="clear" id="clear" type="button">Clear</button></div>
         <div class="terms">${TERMS_TXT}</div>
         <div style="font-size:14px;line-height:1.5;margin-top:14px;color:#111">See our full <a class="tlink" style="font-weight:600" href="https://www.citeamotors.com/" target="_blank" rel="noopener">policies and terms</a>.</div>
-        <label class="agree"><input type="checkbox" id="agree"> I've reviewed this estimate and agree to the terms above.</label>
+        <label class="agree req" id="agreeBox"><input type="checkbox" id="agree"> I've reviewed this estimate and agree to the terms above.</label>
         <div class="err" id="err"></div>
         <button class="decline" id="decline" type="button">I don't want any of this work done</button>
       </div></section>${footer}`;
@@ -335,8 +341,12 @@
     let ptype="";
     cv.addEventListener("pointerdown",e=>{ drawing=true; ptype=e.pointerType; strokes++; last=pt(e); cv.setPointerCapture(e.pointerId); box.classList.add("on"); $("#sighint").classList.add("hidden"); ctx.beginPath(); ctx.arc(last.x,last.y,1.1,0,7); ctx.fillStyle="#111"; ctx.fill(); });
     cv.addEventListener("pointermove",e=>{ if(!drawing) return; const p=pt(e); ctx.beginPath(); ctx.moveTo(last.x,last.y); ctx.lineTo(p.x,p.y); ctx.stroke(); last=p; inked=true; });
-    const end=()=>{ drawing=false; box.classList.remove("on"); }; cv.addEventListener("pointerup",end); cv.addEventListener("pointercancel",end);
-    $("#clear").onclick=size; requestAnimationFrame(size);
+    const reqs=()=>{ const ok={name:$("#name").value.trim().length>=2, sig:inked, agree:$("#agree").checked};
+      $("#name").classList.toggle("done",ok.name); box.classList.toggle("done",ok.sig); $("#agreeBox").classList.toggle("done",ok.agree);
+      $("#main").querySelectorAll("[data-rq]").forEach(t=>{ const d=ok[t.dataset.rq]; t.classList.toggle("done",d); t.textContent=d?"\u2713 Done":"Required"; }); };
+    const end=()=>{ drawing=false; box.classList.remove("on"); reqs(); }; cv.addEventListener("pointerup",end); cv.addEventListener("pointercancel",end);
+    $("#name").addEventListener("input",reqs); $("#agree").addEventListener("change",reqs);
+    $("#clear").onclick=()=>{ size(); reqs(); }; requestAnimationFrame(()=>{ size(); reqs(); });
     const sigData=()=>{ const o=document.createElement("canvas"); o.width=600; o.height=Math.round(600*cv.height/cv.width); const c=o.getContext("2d"); c.fillStyle="#fff"; c.fillRect(0,0,o.width,o.height); c.drawImage(cv,0,0,o.width,o.height); return o.toDataURL("image/png"); };
     let geoKnown=null;   // asked as soon as the page opens, so the phone's prompt isn't a surprise at approval time
     try{ if(navigator.geolocation) navigator.geolocation.getCurrentPosition(p=>{ geoKnown={lat:p.coords.latitude,lon:p.coords.longitude,acc:p.coords.accuracy,ts:new Date(p.timestamp).toISOString()}; },e=>{ geoKnown={status:e.code===1?"Customer declined to share location":"Location unavailable"}; },{enableHighAccuracy:true,timeout:20000,maximumAge:60000}); }catch(e){}
@@ -357,9 +367,7 @@
       const err=$("#err"), name=$("#name").value.trim();
       if(decision==="approved"&&!jobs.some(x=>pick[x.key])) decision="declined";
       if(decision==="approved"){
-        if(name.length<3){ err.textContent="Please type your full name."; $("#name").focus(); return; }
-        const key=x=>String(x||"").toLowerCase().replace(/[^a-z0-9]/g,"");
-        if(key(s.customer) && key(name)!==key(s.customer)){ err.textContent="That name doesn't match the name we have on file. Please type your full first and last name exactly as it is on your account, or call (702) 907-2107."; $("#name").focus(); return; }
+        if(name.length<2){ err.textContent="Please type your name."; $("#name").focus(); return; }
         if(!inked){ err.textContent="Please sign in the box."; box.scrollIntoView({behavior:"smooth",block:"center"}); return; }
         if(!$("#agree").checked){ err.textContent="Please check the box to agree."; return; }
       } else if(!(window.confirm?confirm("Decline this estimate? We won't do this work."):true)) return;
