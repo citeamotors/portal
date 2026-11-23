@@ -347,7 +347,10 @@
   .spacer{flex:1}
   .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
   /* VIN gets the room (17 characters), mileage is a narrow box that still fits 6 digits with a comma */
-  .two.vm{grid-template-columns:minmax(0,1fr) 96px}
+  .two.vm{grid-template-columns:minmax(0,1fr) 132px}
+  .odo{display:flex}.odo input{flex:1;min-width:0;border-top-right-radius:0;border-bottom-right-radius:0}
+  .odo-u{flex:none;width:40px;border:1px solid var(--hairline);border-left:0;background:var(--sub,#F2F2F0);font:600 12px var(--mono);text-transform:lowercase;cursor:pointer;color:var(--ink)}
+  .odo-u.on{background:var(--ink);color:#fff;border-color:var(--ink)}
   .two.vm input{padding-left:8px;padding-right:8px}
   @media (max-width:350px){ .two.vm{grid-template-columns:1fr} }
   .empty{color:var(--steel);text-align:center;padding:28px 8px;font-size:13.5px}
@@ -2172,7 +2175,7 @@
     const isRun=g=>!!(mine&&mine.jobId===j.id&&mine.lineKey===g.key);
     const allDone=groups.length&&groups.every(gDone);
     const missing=wo?wsMissing(j,d):[];
-    const facts=[["Mileage",j.mileage?Number(String(j.mileage).replace(/\D/g,"")).toLocaleString()+" mi":""],["Engine",j.engine||v.engine||""],["Concern",j.title||""]].filter(x=>x[1]);
+    const facts=[["Mileage",odoFmt(j.mileage)],["Engine",j.engine||v.engine||""],["Concern",j.title||""]].filter(x=>x[1]);
     const pct=wo?wsProgress(j,d):0;
     const photos=d.photos||[];
     const pk=(g,p)=>g.key+"|"+String(p.desc||"");
@@ -2223,7 +2226,7 @@
         ${j.notes?`<div class="job-notes" style="margin-top:10px">${esc(j.notes)}</div>`:""}
         ${can&&!j.done&&allDone?(missing.length?`<div class="tjd-left">All jobs complete. Still needed before the car is finished: <b>${esc(missing.join(", "))}</b>.${missing.some(m=>/inspection/.test(m))?` <button class="btn ghost sm" data-tjt="insp" type="button" style="margin-top:8px">Open inspection</button>`:""}</div>`:`<button class="btn finish tjd-carfin" id="tjFinish" type="button">\u2713 Car is finished</button>`):""}
       </div>
-      <div class="card"><div class="two"><div><label style="margin-top:0">Out odometer <span class="muted" style="text-transform:none;letter-spacing:0">(required)</span></label><input id="wsOdo" class="mono ${String(d.odo||"").replace(/\D/g,"")?"fld-ok":"fld-need"}" inputmode="numeric" placeholder="Mileage when done" value="${esc(d.odo||"")}" ${dis}></div><div></div></div>
+      <div class="card"><div class="two"><div><label style="margin-top:0">Out odometer <span class="muted" style="text-transform:none;letter-spacing:0">(required)</span></label>${odoBox(`id="wsOdo" class="mono ${String(d.odo||"").replace(/\D/g,"")?"fld-ok":"fld-need"}" placeholder="Mileage when done" ${dis}`,d.odo||(isKm(j.mileage)?" km":""))}</div><div></div></div>
         <label>Tech notes</label><textarea id="wsNotes" rows="4" placeholder="Anything the office should know" ${dis}>${esc(d.notes||"")}</textarea>
         <div class="muted" style="font-size:12px;margin-top:6px" id="wsStamp">Saves automatically.</div></div>`:""}`}
       </div>`;
@@ -2237,12 +2240,12 @@
     const stopLine=k=>{ const r=runningTask(me.id); if(r&&r.jobId===j.id&&r.lineKey===k){ stopTask(me.id); save(); } sb.rpc("close_job_line",{p_wo:j.id,p_key:k}).then(()=>{},()=>{}); };
     const setDone=(g,val)=>{ const ls=linesOf(g); if(ls.length) ls.forEach(l=>d.labor[l[4]]=val); else d.labor[g.key]=val; if(val) stopLine(g.key); wsSave(true); };
     const askOdo=then=>modal(`<h2>Out odometer</h2><p class="muted" style="margin-top:0">Enter the mileage before closing out ${esc(vehOf(j))}.</p>
-        <input id="odoIn" class="mono" inputmode="numeric" placeholder="Mileage" value="${esc(d.odo||"")}"><div class="err" id="odoErr"></div>
+        ${odoBox('id="odoIn" class="mono" placeholder="Mileage"',d.odo||(isKm(j.mileage)?" km":""))}<div class="err" id="odoErr"></div>
         <div class="row end"><button class="btn ghost" data-close type="button">Not now</button><button class="btn complete" id="odoOk" type="button">Save mileage</button></div>`, root=>{
         const inp=root.querySelector("#odoIn"); inp.focus();
         root.querySelector("#odoOk").onclick=()=>{ const v=inp.value.replace(/\D/g,""); if(!v){ root.querySelector("#odoErr").textContent="Enter the out odometer."; return; }
-          const inn=Number(String(j.mileage||"").replace(/\D/g,"")); if(inn&&Number(v)<inn){ root.querySelector("#odoErr").textContent=`That's lower than the mileage in (${inn.toLocaleString()}).`; return; }
-          d.odo=v; wsSave(true); closeModal(); then(); }; });
+          const inn=Number(String(j.mileage||"").replace(/\D/g,"")); if(inn&&Number(v)<inn&&isKm(j.mileage)===!!inp.dataset.km){ root.querySelector("#odoErr").textContent=`That's lower than the mileage in (${inn.toLocaleString()}).`; return; }
+          d.odo=v+(inp.dataset.km?" km":""); wsSave(true); closeModal(); then(); }; });
     const afterDone=()=>{ const left=groups.filter(x=>!gDone(x)).length;
       if(left){ toast(`${left} job${left>1?"s":""} to go`); return keep(); }
       const miss=wsMissing(j,d); if(!miss.length) return finishCar();
@@ -2594,7 +2597,7 @@
       <div><h3>Who's working on it</h3><div class="two">${sel("body_tech","Body tech")}${sel("painter","Painter")}</div><div class="two">${sel("prep_tech","Prep / detail")}<div><label>Priority</label><select data-bf="priority"><option value="normal">Normal</option><option value="rush" ${j.priority==="rush"?"selected":""}>Rush</option></select></div></div>
         <h3 style="margin-top:18px">Customer</h3><div class="two">${inp("cust_name","Name")}${inp("cust_phone","Phone",'type="tel"')}</div>${inp("cust_email","Email",'type="email"')}
         <h3 style="margin-top:18px">Vehicle</h3><div class="two">${inp("year","Year",'inputmode="numeric"')}${inp("make","Make")}</div><div class="two">${inp("model","Model")}${inp("color","Color")}</div>
-        <div class="two">${inp("vin","VIN",'class="mono" maxlength="17" style="text-transform:uppercase"')}${inp("paint_code","Paint code",'class="mono"')}</div><div class="two">${inp("mileage","Mileage",'inputmode="numeric"')}${inp("plate","Plate")}</div>
+        <div class="two">${inp("vin","VIN",'class="mono" maxlength="17" style="text-transform:uppercase"')}${inp("paint_code","Paint code",'class="mono"')}</div><div class="two">${`<div><label>Mileage</label>${odoBox('data-bf="mileage" class="mono"',j.mileage)}</div>`}${inp("plate","Plate")}</div>
         <div><label>Drivable?</label><select data-bf="drivable"><option value="">Not noted</option><option value="true" ${j.drivable===true?"selected":""}>Yes</option><option value="false" ${j.drivable===false?"selected":""}>No (towed in)</option></select></div></div>
       <div><h3>Who's paying</h3><select data-bf="payer"><option value="customer">Customer pays</option><option value="insurance" ${j.payer==="insurance"?"selected":""}>Insurance claim</option><option value="mixed" ${j.payer==="mixed"?"selected":""}>Insurance plus customer-pay extras</option></select>
         <div id="bjIns" ${ins?"":'style="display:none"'}><div class="two">${inp("insurer","Insurance company")}${inp("claim_no","Claim #",'class="mono"')}</div><div class="two">${inp("policy_no","Policy #",'class="mono"')}${inp("deductible","Deductible ($)",'inputmode="decimal"')}</div>
@@ -2606,7 +2609,7 @@
       <div class="row end" style="margin-top:14px"><span class="muted" id="bjSaved"></span><button class="btn ghost danger sm" type="button" id="bjCancel">${j.stage==="cancelled"?"Reopen job":"Cancel job"}</button><button class="btn" type="button" id="bjSave">Save</button></div>`;
     const pay=el.querySelector('[data-bf="payer"]'); pay.onchange=()=>{ el.querySelector("#bjIns").style.display=pay.value==="customer"?"none":""; };
     el.querySelector("#bjSave").onclick=async()=>{ const p={};
-      el.querySelectorAll("[data-bf]").forEach(i=>{ const k=i.dataset.bf; let v=i.value.trim(); if(k==="drivable") v=v===""?null:v==="true"; else if(k==="deductible") v=v===""?null:bNumv(v); else if(["body_tech","painter","prep_tech"].includes(k)) v=v||null; else if(k==="vin") v=v.toUpperCase()||null; p[k]=v; });
+      el.querySelectorAll("[data-bf]").forEach(i=>{ const k=i.dataset.bf; let v=k==="mileage"?odoVal(i):i.value.trim(); if(k==="drivable") v=v===""?null:v==="true"; else if(k==="deductible") v=v===""?null:bNumv(v); else if(["body_tech","painter","prep_tech"].includes(k)) v=v||null; else if(k==="vin") v=v.toUpperCase()||null; p[k]=v; });
       p.impact=[...el.querySelectorAll("[data-imp]:checked")].map(i=>i.dataset.imp);
       const who=["body_tech","painter","prep_tech"].filter(k=>(p[k]||null)!==(j[k]||null));
       if(await bSave(j,p,"Saved")){ who.forEach(k=>bLog(j,"assign",`${{body_tech:"Body tech",painter:"Painter",prep_tech:"Prep / detail"}[k]}: ${(bUser(p[k])||{}).name||"nobody"}`)); bodyJobView(j); } };
@@ -2842,6 +2845,15 @@
         :'<span class="muted">No page activity recorded for this login. (Activity tracking started Nov 22, 2026.)</span>'; });
   }
 
+  /* ---------- odometer: miles by default, km when the mi/km button is switched (stored as "12,345 km") ---------- */
+  const isKm=s=>/\bkm\b/i.test(String(s||""));
+  const odoNum=s=>String(s||"").replace(/\s*(km|mi|miles)\.?\s*$/i,"").trim();
+  const odoFmt=s=>{ const n=String(s||"").replace(/\D/g,""); return n?Number(n).toLocaleString()+(isKm(s)?" km":" mi"):""; };
+  const odoBox=(attrs,val)=>`<div class="odo"><input ${attrs} inputmode="numeric" value="${esc(odoNum(val))}" data-km="${isKm(val)?1:""}"><button type="button" class="odo-u${isKm(val)?" on":""}" title="Switch between miles and kilometers">${isKm(val)?"km":"mi"}</button></div>`;
+  const odoVal=el=>{ if(!el) return ""; const v=odoNum(el.value); return v&&el.dataset.km?v+" km":v; };
+  document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest(".odo-u"); if(!b) return; const i=b.parentNode.querySelector("input"); if(!i||i.disabled) return;
+    i.dataset.km=i.dataset.km?"":"1"; b.textContent=i.dataset.km?"km":"mi"; b.classList.toggle("on",!!i.dataset.km);
+    i.dispatchEvent(new Event("input",{bubbles:true})); i.dispatchEvent(new Event("change",{bubbles:true})); });
   /* ---------- training ---------- */
   const playIcon='<svg viewBox="0 0 24 24" fill="#fff"><circle cx="12" cy="12" r="11" fill="#C8201F"/><path d="M10 8l6 4-6 4z"/></svg>';
   function viewTraining(){
@@ -5444,7 +5456,7 @@
                 <div><label>Make</label><input id="vMake" value="${esc(j.make)}"></div>
                 <div><label>Model</label><input id="vModel" value="${esc(j.model)}"></div></div>
               <div class="two vm"><div><label>VIN</label><input id="vVin" class="mono" value="${esc(j.vin)}" maxlength="17" style="text-transform:uppercase"></div>
-                <div><label>Mileage in</label><input id="vMiles" class="mono" inputmode="numeric" value="${esc(j.mileage)}"></div></div>
+                <div><label>Mileage in</label>${odoBox('id="vMiles" class="mono"',j.mileage)}</div></div>
               <label>Engine</label><input id="vEngine" value="${esc(j.engine||"")}" placeholder="e.g. 3.6L V6">
               ${vehPhotoHTML(j)}
               ${keyPhotoHTML(j)}
@@ -5506,7 +5518,7 @@
       const v=s=>{ const e=$(s); return e?e.value:undefined; };
       j._costs=j._costs||{};
       if(newCust){ j._cName=v("#cName")?.trim(); j._cPhone=v("#cPhone")?.trim(); j._cEmail=v("#cEmail")?.trim(); const ct=$("#cTextOk"); if(ct) j._cTextOk=ct.checked; }
-      Object.assign(j,{year:v("#vYear").trim(),make:v("#vMake").trim(),model:v("#vModel").trim(),vin:v("#vVin").replace(/\s/g,"").toUpperCase(),mileage:v("#vMiles").trim(),engine:(v("#vEngine")||"").trim(),plate:(v("#vPlate")||"").trim().toUpperCase(),
+      Object.assign(j,{year:v("#vYear").trim(),make:v("#vMake").trim(),model:v("#vModel").trim(),vin:v("#vVin").replace(/\s/g,"").toUpperCase(),mileage:$("#vMiles")?odoVal($("#vMiles")):undefined,engine:(v("#vEngine")||"").trim(),plate:(v("#vPlate")||"").trim().toUpperCase(),
         title:v("#wTitle").trim(),status:v("#wStatus"),assignee:v("#wTech"),techs:[...$("#view").querySelectorAll("[data-crew]")].filter(e=>e.checked&&e.dataset.crew!==v("#wTech")).map(e=>e.dataset.crew),priority:v("#wPri"),date:v("#wDate")||todayStr(),
         notes:v("#wNotes").trim()});
       // match each box on screen to its line by the line's id, not its position: after a save drops an empty line
@@ -5794,13 +5806,13 @@
       .sort((a,b)=>new Date(b.r.updated_at)-new Date(a.r.updated_at));
     const seen=new Set(), out=[];
     for(const v of visits){ const names=Object.fromEntries(wsItemsFor(v.x)); for(const [k,val] of Object.entries(v.r.data.items)){ if(seen.has(k)||!val||!val.r) continue; seen.add(k);
-      if(val.r==="watch"||val.r==="repair") out.push({k,label:names[k]||k,r:val.r,f:String(val.f||"").trim(),at:new Date(v.r.updated_at),wo:v.x,odo:String(v.r.data.odo||"").replace(/\D/g,"")}); } }
+      if(val.r==="watch"||val.r==="repair") out.push({k,label:names[k]||k,r:val.r,f:String(val.f||"").trim(),at:new Date(v.r.updated_at),wo:v.x,odo:String(v.r.data.odo||"")}); } }
     return out.sort((a,b)=>(a.r==="repair"?0:1)-(b.r==="repair"?0:1));
   }
   function priorHTML(j, compact){
     const pf=priorFindings(j); if(!pf.length) return "";
     return `<div class="prior-find ${compact?"compact":""}"><div class="pf-h">From earlier visits \u00b7 recheck these</div>${pf.map(x=>`<div class="pf-row"><span class="pill ${x.r==="repair"?"red":"amber"}">${x.r==="repair"?"Repair":"Watch"}</span> <b>${esc(x.label)}</b>${x.f?` \u2014 ${esc(x.f)}`:""}
-      <span class="muted">\u00b7 ${esc(x.at.toLocaleDateString([],{month:"short",day:"numeric",year:"numeric"}))}${x.odo?` at ${Number(x.odo).toLocaleString()} mi`:""}${x.wo.number?` \u00b7 #${esc(x.wo.number)}`:""}</span></div>`).join("")}</div>`;
+      <span class="muted">\u00b7 ${esc(x.at.toLocaleDateString([],{month:"short",day:"numeric",year:"numeric"}))}${x.odo.replace(/\D/g,"")?` at ${odoFmt(x.odo)}`:""}${x.wo.number?` \u00b7 #${esc(x.wo.number)}`:""}</span></div>`).join("")}</div>`;
   }
   function wsCard(j){
     const r=(db.worksheets||{})[j.id], pct=r?r.progress:0, d=(r&&r.data)||{}, it=d.items||{};
@@ -5856,7 +5868,7 @@
         <span class="pill ${pct>=100?"green":"prog"}" id="wsPctPill">${pct}% done</span></div>
         <div class="ws-bar"><i id="wsPctBar" style="width:${pct}%"></i></div>
         <div class="muted" style="font-size:12px;margin-top:6px" id="wsStamp">${r?`Saved ${new Date(r.updated_at).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})} \u00b7 ${esc(userName(r.updated_by))}`:"Changes save automatically and show up live for the office."}${can?"":" \u00b7 View only (you're not on this job)"}</div></div>
-      <div class="card"><dl class="kv ws-kv"><dt>VIN</dt><dd class="mono">${esc(j.vin||"\u2014")}</dd><dt>Engine</dt><dd>${esc(j.engine||"\u2014")}</dd><dt>Mileage in</dt><dd class="mono">${esc(j.mileage||"\u2014")}</dd>
+      <div class="card"><dl class="kv ws-kv"><dt>VIN</dt><dd class="mono">${esc(j.vin||"\u2014")}</dd><dt>Engine</dt><dd>${esc(j.engine||"\u2014")}</dd><dt>Mileage in</dt><dd class="mono">${esc(odoFmt(j.mileage)||"\u2014")}</dd>
         <dt>Technician</dt><dd>${esc(crewNames(j))}</dd><dt>Service writer</dt><dd>Basir Dur</dd></dl>
         ${keyPhotoOf(j)?`<div class="keyrow"><div class="keyimg"><img src="${keyPhotoOf(j)}" alt="Key photo" id="wsKeyImg"></div><div><div class="kr-t">Key</div><div class="hint" style="margin-top:2px">Tap to enlarge. Make sure this is the key you take.</div></div></div>`:""}</div>
       ${wsPhotos("before","Before photos",ph("before"),can)}
@@ -5865,7 +5877,7 @@
       <div class="card"><h2>Labor</h2>
         ${lab.length?lab.map(l=>`<label class="ws-task ${d.labor[l[4]]?"on":""}"><input type="checkbox" data-wsl="${l[4]}" ${d.labor[l[4]]?"checked":""} ${dis}><span>${esc(l[0])}${l[7]?`<small class="ws-note">${esc(l[7])}</small>`:""}</span><b class="mono">${techHrsOf(l).toFixed(2)}</b></label>`).join(""):'<div class="muted">No labor lines on this work order.</div>'}
       </div>
-      <div class="card"><div class="two"><div><label style="margin-top:0">Out odometer</label><input id="wsOdo" class="mono" inputmode="numeric" value="${esc(d.odo||"")}" ${dis}></div><div></div></div>
+      <div class="card"><div class="two"><div><label style="margin-top:0">Out odometer</label>${odoBox(`id="wsOdo" class="mono" ${dis}`,d.odo||(isKm(j.mileage)?" km":""))}</div><div></div></div>
         <label>Tech notes</label><textarea id="wsNotes" rows="4" placeholder="Anything the office should know" ${dis}>${esc(d.notes||"")}</textarea></div>
       ${wsPhotos("after","Photos",ph("after"),can)}
     </div>`;
@@ -5879,7 +5891,7 @@
     $("#view").querySelectorAll(".ws-find").forEach(t=>{ sizeTa(t); t.oninput=()=>{ sizeTa(t); (it[t.dataset.wsf]=it[t.dataset.wsf]||{}).f=t.value; t.closest(".ws-item").classList.toggle("has-f",!!t.value); wsSave(); }; });
     $("#view").querySelectorAll("[data-wsr]").forEach(b=>b.onclick=()=>{ const x=it[b.dataset.wsr]=it[b.dataset.wsr]||{}; x.r=x.r===b.dataset.v?"":b.dataset.v; wsSave(); renderWorksheetKeep(); });
     $("#view").querySelectorAll("[data-wsl]").forEach(c=>c.onchange=()=>{ d.labor[c.dataset.wsl]=c.checked; c.parentElement.classList.toggle("on",c.checked); wsSave(); });
-    const odo=$("#wsOdo"); if(odo) odo.oninput=()=>{ d.odo=odo.value.trim(); if(odo.closest(".tjd-wrap")){ const f=!!d.odo.replace(/\D/g,""); odo.classList.toggle("fld-ok",f); odo.classList.toggle("fld-need",!f); } wsSave(); };
+    const odo=$("#wsOdo"); if(odo) odo.oninput=()=>{ d.odo=odoVal(odo); if(odo.closest(".tjd-wrap")){ const f=!!d.odo.replace(/\D/g,""); odo.classList.toggle("fld-ok",f); odo.classList.toggle("fld-need",!f); } wsSave(); };
     $("#view").querySelectorAll("[data-tp]").forEach(inp=>inp.oninput=()=>{ d.tp=d.tp||{}; d.tp[inp.dataset.tp]=inp.value.replace(/[^0-9.]/g,"").slice(0,5); if(inp.value!==d.tp[inp.dataset.tp]) inp.value=d.tp[inp.dataset.tp];
       const row=inp.closest(".tp-row"); if(row) row.classList.toggle("tp-low",tpLow(d,row.dataset.tpw)); const wi=inp.closest(".ws-item"); if(wi) wi.classList.toggle("has-f",Object.values(d.tp).some(Boolean)||!!(it.tpress&&it.tpress.f)); wsSave(); });
     const nt=$("#wsNotes"); if(nt) nt.oninput=()=>{ d.notes=nt.value; wsSave(); };
@@ -6042,7 +6054,7 @@
     modal(`<div class="row"><h2 style="margin:0">${esc(c.name)}</h2><span class="spacer"></span><button class="btn ghost sm" id="cdEdit">Edit</button></div>
       <div class="muted" style="margin:4px 0 10px">${esc(fmtPhone(c.phone)||"")} ${c.email?"\u00b7 "+esc(c.email):""}</div>
       <label>Vehicles</label>
-      ${vs.map(v=>`<div class="row vehrow"><span>${esc([v.year,v.make,v.model].join(" "))}<div class="hint" style="margin:0">${v.vin?"VIN "+esc(v.vin):"No VIN"}${v.mileage?" \u00b7 "+esc(v.mileage)+" mi":""}</div></span><span class="spacer"></span><button class="btn ghost sm" data-evh="${v.id}">Edit</button><button class="btn sm" data-nwo="${v.id}" style="margin-left:6px">New work order</button></div>`).join("")||`<div class="muted">No vehicles yet.</div>`}
+      ${vs.map(v=>`<div class="row vehrow"><span>${esc([v.year,v.make,v.model].join(" "))}<div class="hint" style="margin:0">${v.vin?"VIN "+esc(v.vin):"No VIN"}${v.mileage?" \u00b7 "+esc(odoFmt(v.mileage)):""}</div></span><span class="spacer"></span><button class="btn ghost sm" data-evh="${v.id}">Edit</button><button class="btn sm" data-nwo="${v.id}" style="margin-left:6px">New work order</button></div>`).join("")||`<div class="muted">No vehicles yet.</div>`}
       <label>Work orders</label>
       ${wos.map(j=>`<div class="row vehrow click" data-owo="${j.id}"><span>${esc(j.title)}<div class="hint" style="margin:0">${esc(vehOf(j))} \u00b7 ${new Date(j.date+"T12:00").toLocaleDateString()}</div></span><span class="spacer"></span>${statusPill(j.status)}<b>${money(woTotals(j).total)}</b></div>`).join("")||`<div class="muted">None yet.</div>`}
       <label>Estimate approvals</label>
@@ -6064,7 +6076,7 @@
     modal(`<h2>Edit vehicle</h2>
       <button class="btn scanbig" id="camVin" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 12h10"/></svg>Scan VIN</button><div class="scanrow scan2"><label class="btn ghost sm">VIN from photo<input type="file" id="scanVin" accept="image/*" hidden></label><button class="btn ghost sm" id="decodeVin" type="button">Decode VIN</button></div>
       <div class="two" style="grid-template-columns:80px 1fr 1fr"><div><label>Year</label><input id="mYear" inputmode="numeric" value="${esc(v.year||"")}"></div><div><label>Make</label><input id="mMake" value="${esc(v.make||"")}"></div><div><label>Model</label><input id="mModel" value="${esc(v.model||"")}"></div></div>
-      <div class="two vm"><div><label>VIN</label><input id="mVin" class="mono" maxlength="17" style="text-transform:uppercase" value="${esc(v.vin||"")}"></div><div><label>Mileage</label><input id="mMiles" class="mono" inputmode="numeric" value="${esc(v.mileage||"")}"></div></div>
+      <div class="two vm"><div><label>VIN</label><input id="mVin" class="mono" maxlength="17" style="text-transform:uppercase" value="${esc(v.vin||"")}"></div><div><label>Mileage</label>${odoBox('id="mMiles" class="mono"',v.mileage)}</div></div>
       <div class="two"><div><label>Engine</label><input id="mEngine" value="${esc(v.engine||"")}"></div><div><label>License plate</label><input id="mPlate" class="mono" style="text-transform:uppercase" value="${esc(v.plate||"")}"></div></div>
       <div class="hint" id="vinHint"></div>
       <div class="err" id="mErr"></div>
@@ -6079,7 +6091,7 @@
         });
         root.querySelector("#mSave").onclick=()=>{
           if(!g("mMake")&&!g("mModel")) return root.querySelector("#mErr").textContent="Enter the make or model.";
-          const f={year:g("mYear"),make:g("mMake"),model:g("mModel"),vin:g("mVin").replace(/\s/g,"").toUpperCase(),engine:g("mEngine"),mileage:g("mMiles"),plate:g("mPlate").toUpperCase()};
+          const f={year:g("mYear"),make:g("mMake"),model:g("mModel"),vin:g("mVin").replace(/\s/g,"").toUpperCase(),engine:g("mEngine"),mileage:odoVal(root.querySelector("#mMiles")),plate:g("mPlate").toUpperCase()};
           Object.assign(v,f);
           db.jobs.filter(j=>j.vehicleId===v.id&&j.status!=="picked_up").forEach(j=>Object.assign(j,{year:f.year,make:f.make,model:f.model,vin:f.vin,engine:f.engine,plate:f.plate}));
           save(); closeModal(); if(after) after(); toast("Vehicle saved");
