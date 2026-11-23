@@ -350,7 +350,8 @@
   .two.vm{grid-template-columns:minmax(0,1fr) 132px}
   .odo{display:flex}.odo input{flex:1;min-width:0;border-top-right-radius:0;border-bottom-right-radius:0}
   .odo-u{flex:none;width:40px;border:1px solid var(--hairline);border-left:0;background:var(--sub,#F2F2F0);font:600 12px var(--mono);text-transform:lowercase;cursor:pointer;color:var(--ink)}
-  .odo-u.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .odo-u.on{background:var(--ink);color:var(--on-ink,#fff);border-color:var(--ink)}
+  html[data-theme="dark"] .odo-u{background:#2A2A2A;color:#F2F2F2;border-color:var(--hairline)} html[data-theme="dark"] .odo-u.on{background:#F2F2F2;color:#111;border-color:#F2F2F2}
   .two.vm input{padding-left:8px;padding-right:8px}
   @media (max-width:350px){ .two.vm{grid-template-columns:1fr} }
   .empty{color:var(--steel);text-align:center;padding:28px 8px;font-size:13.5px}
