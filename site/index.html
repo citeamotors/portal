@@ -1387,7 +1387,7 @@
     if(t==="qbo_links"){ db.qboLinks=db.qboLinks||{}; if(ev==="DELETE") delete db.qboLinks[od.wo_id]; else db.qboLinks[nw.wo_id]=nw; return scheduleRender(); }
     if(t==="customer_links"){ db.custLinks=db.custLinks||{}; if(ev==="DELETE") delete db.custLinks[od.wo_id]; else db.custLinks[nw.wo_id]={...(db.custLinks[nw.wo_id]||{}),...nw}; return; }
     if(t==="payments"){ db.payments=db.payments||[]; const i=db.payments.findIndex(p=>p.id===(nw.id||od.id)); if(ev==="DELETE"){ if(i>=0) db.payments.splice(i,1); } else if(i>=0) db.payments[i]=nw; else db.payments.push(nw); return scheduleRender(); }
-    if(t==="worksheets"){ db.worksheets=db.worksheets||{}; if(ev==="DELETE") delete db.worksheets[od.wo_id]; else { if((wsEcho[nw.wo_id]||[]).includes(JSON.stringify(nw.data||{}))) return; db.worksheets[nw.wo_id]=nw; if(wsOpenId===nw.wo_id) wsRemote(nw); }
+    if(t==="worksheets"){ db.worksheets=db.worksheets||{}; if(ev==="DELETE") delete db.worksheets[od.wo_id]; else { if((wsEcho[nw.wo_id]||[]).includes(canonJ(nw.data||{}))) return; db.worksheets[nw.wo_id]=nw; if(wsOpenId===nw.wo_id) wsRemote(nw); }
       return tab==="ws"?undefined:scheduleRender(); }
     if(t==="wo_costs"){ db.woCosts=db.woCosts||{}; if(ev==="DELETE") delete db.woCosts[od.wo_id]; else db.woCosts[nw.wo_id]=nw.costs||{};
       (snap.wo_costs=snap.wo_costs||new Map()); if(ev==="DELETE") snap.wo_costs.delete(od.wo_id); else snap.wo_costs.set(nw.wo_id,JSON.stringify({wo_id:nw.wo_id,costs:nw.costs||{}})); return; }
@@ -2204,7 +2204,7 @@
     const approved=!wo||j.status!=="estimate"||!!validApproval(j);
     // revised estimate: jobs the customer already approved (same price) can keep going; new or changed ones wait
     const okKeys=approved?null:approvedJobKeys(j), jobOk=g=>approved||!!(okKeys&&okKeys.has(g.key));
-    if(wo){ if(wsOpenId!==j.id||!wsData){ normLines(j); const r=(db.worksheets||{})[j.id]; wsData=JSON.parse(JSON.stringify((r&&r.data)||{})); }
+    if(wo){ if(wsOpenId!==j.id||!wsData){ normLines(j); const r=(db.worksheets||{})[j.id]; wsData=JSON.parse(JSON.stringify((r&&r.data)||{})); wsBase=JSON.parse(JSON.stringify((r&&r.data)||{})); }
       wsData.items=wsData.items||{}; wsData.labor=wsData.labor||{}; wsData.photos=wsData.photos||[]; wsData.pok=wsData.pok||{}; wsOpenId=j.id; }
     const d=wsData||{labor:{},photos:[],items:{},pok:{}};
     const groups=wo?jobGroups(j):[];
@@ -4997,10 +4997,11 @@
   // ----- saving a worksheet from two devices at once -----
   // base = what this device last knew was on the server; local = this device's version; server = what's there now.
   // Keeps every change made on either device (only a change to the very same item by both goes to this device).
+  const canonJ=x=>JSON.stringify(x===undefined?null:x,(k,v)=>v&&typeof v==="object"&&!Array.isArray(v)?Object.keys(v).sort().reduce((a,y)=>(a[y]=v[y],a),{}):v);
   const wsEcho={};   // wo_id -> recent worksheet contents this device saved (their echoes are skipped)
   let wsBase=null;   // the open worksheet as last known on the server
   function merge3(base,local,server){
-    const J=x=>JSON.stringify(x===undefined?null:x);
+    const J=canonJ;
     if(J(local)===J(base)) return server;
     if(J(server)===J(base)||server===undefined) return local;
     const isObj=x=>x&&typeof x==="object"&&!Array.isArray(x);
@@ -5020,12 +5021,12 @@
     return local;
   }
   async function wsUpsert(woId, data, progressOf){
-    const base=(((db.worksheets||{})[woId]||{}).data)||{};
+    const base=(wsOpenId===woId&&wsBase)?wsBase:((((db.worksheets||{})[woId]||{}).data)||{});
     let merged=data;
     try{ const {data:rows,error}=await sb.from("worksheets").select("data").eq("wo_id",woId).limit(1); if(!error&&rows&&rows[0]) merged=merge3(base,data,rows[0].data||{}); }catch(e){}
     merged.items=merged.items||{}; merged.labor=merged.labor||{}; merged.photos=merged.photos||[];
     const row={wo_id:woId,data:merged,progress:progressOf(merged),updated_by:me.id,updated_at:new Date().toISOString()};
-    wsEcho[woId]=[...(wsEcho[woId]||[]),JSON.stringify(merged)].slice(-15);
+    wsEcho[woId]=[...(wsEcho[woId]||[]),canonJ(merged)].slice(-15);
     const {error}=await sb.from("worksheets").upsert(row); if(error) throw error;
     db.worksheets=db.worksheets||{}; db.worksheets[woId]=row;
     return row;
@@ -5896,7 +5897,7 @@
     const merged=wsBase?merge3(wsBase,local,theirs):theirs;
     wsBase=theirs;
     wsData=merged; wsData.items=wsData.items||{}; wsData.labor=wsData.labor||{}; wsData.photos=wsData.photos||[]; renderWorksheetKeep();
-    if(JSON.stringify(merged)!==JSON.stringify(theirs)) wsSave();
+    if(canonJ(merged)!==canonJ(theirs)) wsSave();
   }
   function openWorksheet(id){
     const j=db.jobs.find(x=>x.id===id); if(!j){ toast("That work order isn't here anymore."); return; }
@@ -5946,18 +5947,18 @@
     wsBind(j);
   }
   function wsBind(j){
-    const d=wsData, it=d.items=d.items||{};
+    const D=()=>{ const w=wsData; w.items=w.items||{}; w.labor=w.labor||{}; w.photos=w.photos||[]; return w; };
     const sizeTa=t=>{ t.style.height="auto"; t.style.height=t.scrollHeight+"px"; };
-    $("#view").querySelectorAll(".ws-find").forEach(t=>{ sizeTa(t); t.oninput=()=>{ sizeTa(t); (it[t.dataset.wsf]=it[t.dataset.wsf]||{}).f=t.value; t.closest(".ws-item").classList.toggle("has-f",!!t.value); wsSave(); }; });
-    $("#view").querySelectorAll("[data-wsr]").forEach(b=>b.onclick=()=>{ const x=it[b.dataset.wsr]=it[b.dataset.wsr]||{}; x.r=x.r===b.dataset.v?"":b.dataset.v; wsSave(); renderWorksheetKeep(); });
-    $("#view").querySelectorAll("[data-wsl]").forEach(c=>c.onchange=()=>{ d.labor[c.dataset.wsl]=c.checked; c.parentElement.classList.toggle("on",c.checked); wsSave(); });
-    const odo=$("#wsOdo"); if(odo) odo.oninput=()=>{ d.odo=odoVal(odo); if(odo.closest(".tjd-wrap")){ const f=!!d.odo.replace(/\D/g,""); odo.classList.toggle("fld-ok",f); odo.classList.toggle("fld-need",!f); } wsSave(); };
-    $("#view").querySelectorAll("[data-tp]").forEach(inp=>inp.oninput=()=>{ d.tp=d.tp||{}; d.tp[inp.dataset.tp]=inp.value.replace(/[^0-9.]/g,"").slice(0,5); if(inp.value!==d.tp[inp.dataset.tp]) inp.value=d.tp[inp.dataset.tp];
-      const row=inp.closest(".tp-row"); if(row) row.classList.toggle("tp-low",tpLow(d,row.dataset.tpw)); const wi=inp.closest(".ws-item"); if(wi) wi.classList.toggle("has-f",Object.values(d.tp).some(Boolean)||!!(it.tpress&&it.tpress.f)); wsSave(); });
-    const nt=$("#wsNotes"); if(nt) nt.oninput=()=>{ d.notes=nt.value; wsSave(); };
+    $("#view").querySelectorAll(".ws-find").forEach(t=>{ sizeTa(t); t.oninput=()=>{ sizeTa(t); (D().items[t.dataset.wsf]=D().items[t.dataset.wsf]||{}).f=t.value; t.closest(".ws-item").classList.toggle("has-f",!!t.value); wsSave(); }; });
+    $("#view").querySelectorAll("[data-wsr]").forEach(b=>b.onclick=()=>{ const x=D().items[b.dataset.wsr]=D().items[b.dataset.wsr]||{}; x.r=x.r===b.dataset.v?"":b.dataset.v; wsSave(); renderWorksheetKeep(); });
+    $("#view").querySelectorAll("[data-wsl]").forEach(c=>c.onchange=()=>{ D().labor[c.dataset.wsl]=c.checked; c.parentElement.classList.toggle("on",c.checked); wsSave(); });
+    const odo=$("#wsOdo"); if(odo) odo.oninput=()=>{ D().odo=odoVal(odo); if(odo.closest(".tjd-wrap")){ const f=!!D().odo.replace(/\D/g,""); odo.classList.toggle("fld-ok",f); odo.classList.toggle("fld-need",!f); } wsSave(); };
+    $("#view").querySelectorAll("[data-tp]").forEach(inp=>inp.oninput=()=>{ D().tp=D().tp||{}; D().tp[inp.dataset.tp]=inp.value.replace(/[^0-9.]/g,"").slice(0,5); if(inp.value!==D().tp[inp.dataset.tp]) inp.value=D().tp[inp.dataset.tp];
+      const row=inp.closest(".tp-row"); if(row) row.classList.toggle("tp-low",tpLow(D(),row.dataset.tpw)); const wi=inp.closest(".ws-item"); if(wi) wi.classList.toggle("has-f",Object.values(D().tp).some(Boolean)||!!(D().items.tpress&&D().items.tpress.f)); wsSave(); });
+    const nt=$("#wsNotes"); if(nt) nt.oninput=()=>{ D().notes=nt.value; wsSave(); };
     $("#view").querySelectorAll(".ws input, .ws textarea").forEach(e=>e.addEventListener("blur",()=>{ if(wsData&&wsData._pending){ const p=wsData._pending; setTimeout(()=>wsRemote(p),50); } }));
     $("#view").querySelectorAll("[data-wsadd]").forEach(inp=>inp.onchange=async()=>{ const kind=inp.dataset.wsadd; for(const f of inp.files){ await wsAddPhoto(j,f,kind); } });
-    $("#view").querySelectorAll("[data-wsdel]").forEach(b=>b.onclick=()=>{ d.photos=d.photos.filter(p=>p.path!==b.dataset.wsdel); wsSave(); renderWorksheetKeep(); sb.storage.from("ws-photos").remove([b.dataset.wsdel]); });
+    $("#view").querySelectorAll("[data-wsdel]").forEach(b=>b.onclick=()=>{ D().photos=D().photos.filter(p=>p.path!==b.dataset.wsdel); wsSave(); renderWorksheetKeep(); sb.storage.from("ws-photos").remove([b.dataset.wsdel]); });
     preBind(); wsLoadThumbs();
   }
   // ---- pre-repair inspection & test drive: the car's condition when we received it, before any work
@@ -5983,12 +5984,12 @@
       ${p.at?`<div class="muted" style="font-size:12px;margin-top:10px">Completed ${esc(new Date(p.at).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}))} \u00b7 ${esc(userName(p.by))}</div>`:dr==="yes"?`<div class="muted" style="font-size:12px;margin-top:10px">${preCount(d)} of ${PRE_ITEMS.length} checked</div>`:""}
     </div>`; }
   function preBind(){
-    const d=wsData; if(!d) return; const p=preOf(d);
+    if(!wsData) return; const P=()=>preOf(wsData);
     const sizeTa=t=>{ t.style.height="auto"; t.style.height=t.scrollHeight+"px"; };
-    $("#view").querySelectorAll("[data-pdr]").forEach(b=>b.onclick=()=>{ p.drivable=p.drivable===b.dataset.pdr?"":b.dataset.pdr; preStamp(d); wsSave(); renderWorksheetKeep(); });
-    $("#view").querySelectorAll("[data-prr]").forEach(b=>b.onclick=()=>{ const x=p.items[b.dataset.prr]=p.items[b.dataset.prr]||{}; x.r=x.r===b.dataset.v?"":b.dataset.v; preStamp(d); wsSave(); renderWorksheetKeep(); });
-    $("#view").querySelectorAll("[data-prf]").forEach(t=>{ sizeTa(t); t.oninput=()=>{ sizeTa(t); (p.items[t.dataset.prf]=p.items[t.dataset.prf]||{}).f=t.value; t.closest(".ws-item").classList.toggle("has-f",!!t.value); wsSave(); }; });
-    const why=$("#view").querySelector("[data-pwhy]"); if(why){ sizeTa(why); why.oninput=()=>{ sizeTa(why); p.why=why.value; wsSave(); }; }
+    $("#view").querySelectorAll("[data-pdr]").forEach(b=>b.onclick=()=>{ P().drivable=P().drivable===b.dataset.pdr?"":b.dataset.pdr; preStamp(wsData); wsSave(); renderWorksheetKeep(); });
+    $("#view").querySelectorAll("[data-prr]").forEach(b=>b.onclick=()=>{ const x=P().items[b.dataset.prr]=P().items[b.dataset.prr]||{}; x.r=x.r===b.dataset.v?"":b.dataset.v; preStamp(wsData); wsSave(); renderWorksheetKeep(); });
+    $("#view").querySelectorAll("[data-prf]").forEach(t=>{ sizeTa(t); t.oninput=()=>{ sizeTa(t); (P().items[t.dataset.prf]=P().items[t.dataset.prf]||{}).f=t.value; t.closest(".ws-item").classList.toggle("has-f",!!t.value); wsSave(); }; });
+    const why=$("#view").querySelector("[data-pwhy]"); if(why){ sizeTa(why); why.oninput=()=>{ sizeTa(why); P().why=why.value; wsSave(); }; }
   }
   // ---- full-screen photo viewer: swipe on phones, arrows / arrow keys on a computer
   function lightbox(urls, start, opt){
@@ -6080,7 +6081,7 @@
       catch(error){ setSync("error",error.message); if(isAuthErr(error.message)&&!(await authOK())) return; toast("Worksheet not saved: "+(error.message||error)); return; }
       setSync("ok"); if(wsOpenId===j.id) wsBase=JSON.parse(JSON.stringify(row.data));
       // the other device's changes came back merged in: show them (unless this sheet is mid-edit)
-      if(wsOpenId===j.id&&wsData===dref&&JSON.stringify(row.data)!==JSON.stringify(data)) wsRemote(row);
+      if(wsOpenId===j.id&&wsData===dref&&canonJ(row.data)!==canonJ(data)) wsRemote(row);
       const st=$("#wsStamp"); if(st) st.textContent=`Saved ${new Date().toLocaleTimeString([],{hour:"numeric",minute:"2-digit"})} \u00b7 ${me.name}`;
     }, now?0:700);
   }
