@@ -375,6 +375,8 @@
   td.num,th.num{text-align:right}
   .tablewrap{overflow-x:auto}
   tr.click,.click{cursor:pointer}
+  .tix-n{font-size:11.5px;color:var(--steel,#686868);white-space:nowrap;margin-left:6px}
+  .rep-kpis .stat.click:hover{background:var(--paper)}
   tr.click:hover td{background:var(--paper)}
 
   /* stats strip */
@@ -1831,6 +1833,7 @@
     renderAlerts();
   }
   function show(t){
+    openWO.from=null;
     if(t==="jobs"&&me&&me.role!=="manager"&&shopWork(me)==="body") t="bodyjobs";
     if(me&&t==="earnings"&&!isFin()) t="clock";
     if(me&&t!=="settings"&&t!=="timesheets"&&t!=="earnings"&&!canPage(t)){ const f=document.querySelector("#tabs button[data-tab]"); if(f&&f.dataset.tab!==t) t=f.dataset.tab; }
@@ -3185,43 +3188,51 @@
     const kv=rows=>tbl([["Measure"],["Value","num"]], rows.map(([a,b])=>`<tr><td>${a}</td><td class="num">${b}</td></tr>`));
     const trow=cells=>`<tr>${cells.map(c=>Array.isArray(c)?`<td class="num">${c[0]}</td>`:`<td>${c}</td>`).join("")}</tr>`;
     const S={};
+    const TX=[], tx=list=>{ TX.push(list.map(j=>j.id)); return TX.length-1; };
+    const trowT=(cells,list)=>list&&list.length?trow(cells).replace("<tr>",`<tr class="click" data-tix="${tx(list)}">`):trow(cells);
+    const trow1=(cells,j)=>j&&j.id?trow(cells).replace("<tr>",`<tr class="click" data-wo1="${j.id}">`):trow(cells);
+    const tixN=l=>` <span class="tix-n no-print">${l.length} ticket${l.length>1?"s":""} \u203a</span>`;
+    const kvT=rows=>tbl([["Measure"],["Value","num"]], rows.map(([a,b,l])=>l&&l.length?`<tr class="click" data-tix="${tx(l)}" data-tixt="${esc(String(a))}"><td>${a}${tixN(l)}</td><td class="num">${b}</td></tr>`:`<tr><td>${a}</td><td class="num">${b}</td></tr>`));
 
     // ---- Overview (end of day) ----
-    const kpis=fin?[[done.length,"Car count"],[money(sales.total),"Gross sales"],[money(aro),"Avg repair order"],[money(elr),"Effective labor rate"],[money(gp),"Gross profit"],[gpPct+"%","Gross profit %"],[close,"Close ratio"],[money(collected),"Payments in"]]
-      :[[done.length,"Car count"],[hrsBilled.toFixed(1),"Billed hours"],[open.length,"Open work orders"],[open.filter(j=>j.status==="waiting_parts").length,"Waiting on parts"]];
-    S.overview=`<div class="stats rep-kpis">${kpis.map(([v,l])=>`<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("")}</div>`
-      +(fin?card("End of day summary", kv([["Labor sales",money(sales.labor)],["Parts sales",money(sales.parts)],["Discounts",money(sales.disc)],["Sales tax",money(sales.tax)],["Gross sales (with tax)",money(sales.total)],
-        ["Labor / parts split",pct(sales.labor,sales.labor+sales.parts)+" / "+pct(sales.parts,sales.labor+sales.parts)],["Billed hours",hrsBilled.toFixed(1)],["Effective labor rate",money(elr)+" /hr"],
-        ["Parts cost",money(pCost)],["Parts gross profit",money(r2(pSell-pCost))+" ("+pct(pSell-pCost,pSell)+")"],["Team pay for this period",money(payroll)],["Shop gross profit",money(gp)+" ("+gpPct+"%)"],
-        ["Payments collected",money(collected)],["Unpaid balances (all time)",money(r2(owing.reduce((s,x)=>s+x.bal,0)))+` \u00b7 ${owing.length}`],
-        ["Estimates written / approved",money(written)+" / "+money(approvedV)],["Close ratio",close],["New / returning customers",newCust+" / "+(servedIds.length-newCust)]]),
+    const jobsOf=ids=>[...new Set(ids)].map(id=>db.jobs.find(j=>j.id===id)).filter(Boolean);
+    const payJobs=jobsOf(pays.map(p=>p.wo_id)), estJobs=jobsOf(ers.map(r=>r.wo_id)), discJobs=done.filter(j=>tot(j).discount>0), waitJobs=open.filter(j=>j.status==="waiting_parts"), owingJobs=owing.map(x=>x.j);
+    const kpis=fin?[[done.length,"Car count",done],[money(sales.total),"Gross sales",done],[money(aro),"Avg repair order",done],[money(elr),"Effective labor rate",done],[money(gp),"Gross profit",done],[gpPct+"%","Gross profit %",done],[close,"Close ratio",estJobs],[money(collected),"Payments in",payJobs]]
+      :[[done.length,"Car count",done],[hrsBilled.toFixed(1),"Billed hours",done],[open.length,"Open work orders",open],[open.filter(j=>j.status==="waiting_parts").length,"Waiting on parts",waitJobs]];
+    S.overview=`<div class="stats rep-kpis">${kpis.map(([v,l,ls])=>`<div class="stat${ls.length?" click":""}"${ls.length?` data-tix="${tx(ls)}" data-tixt="${esc(l)}" role="button" tabindex="0"`:""}><b>${v}</b><span>${l}</span></div>`).join("")}</div>`
+      +(fin?card("End of day summary", kvT([["Labor sales",money(sales.labor),done],["Parts sales",money(sales.parts),done],["Discounts",money(sales.disc),discJobs],["Sales tax",money(sales.tax),done],["Gross sales (with tax)",money(sales.total),done],
+        ["Labor / parts split",pct(sales.labor,sales.labor+sales.parts)+" / "+pct(sales.parts,sales.labor+sales.parts)],["Billed hours",hrsBilled.toFixed(1),done],["Effective labor rate",money(elr)+" /hr",done],
+        ["Parts cost",money(pCost),done],["Parts gross profit",money(r2(pSell-pCost))+" ("+pct(pSell-pCost,pSell)+")",done],["Team pay for this period",money(payroll)],["Shop gross profit",money(gp)+" ("+gpPct+"%)",done],
+        ["Payments collected",money(collected),payJobs],["Unpaid balances (all time)",money(r2(owing.reduce((s,x)=>s+x.bal,0)))+` \u00b7 ${owing.length}`,owingJobs],
+        ["Estimates written / approved",money(written)+" / "+money(approvedV),estJobs],["Close ratio",close,estJobs],["New / returning customers",newCust+" / "+(servedIds.length-newCust),done]]),
         "Gross profit = sales before tax \u2212 parts cost \u2212 team pay for the period."+(pMiss?` ${pMiss} part line${pMiss>1?"s have":" has"} no cost entered, so profit may read high.`:""))
-      :card("Shop summary", kv([["Cars completed",done.length],["Billed hours",hrsBilled.toFixed(1)],["Open work orders",open.length],["New / returning customers",newCust+" / "+(servedIds.length-newCust)]])));
+      :card("Shop summary", kvT([["Cars completed",done.length,done],["Billed hours",hrsBilled.toFixed(1),done],["Open work orders",open.length,open],["New / returning customers",newCust+" / "+(servedIds.length-newCust),done]])));
 
     // ---- Sales ----
-    const days={}; done.forEach(j=>{ const d=new Date(doneAt(j)); d.setHours(0,0,0,0); const x=days[d.getTime()]=days[d.getTime()]||{jobs:0,labor:0,parts:0,tax:0,total:0,hrs:0}; const t=tot(j); x.jobs++; x.labor+=t.labor; x.parts+=t.parts; x.tax+=t.tax; x.total+=t.total; x.hrs+=laborHrs(j); });
-    const dayRows=Object.entries(days).sort((a,b)=>a[0]-b[0]).map(([k,x])=>trow([new Date(+k).toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"}),[x.jobs],[x.hrs.toFixed(1)]].concat(fin?[[money(r2(x.labor))],[money(r2(x.parts))],[money(r2(x.tax))],[money(r2(x.total))],[money(r2(x.total/x.jobs))]]:[])));
-    const reg=done.slice().sort((a,b)=>doneAt(a)-doneAt(b)).map(j=>{ const t=tot(j), paid=paidOf(j); return trow([dt(doneAt(j)),no(j),name(j),esc(vehOf(j))].concat(fin?[[money(t.labor)],[money(t.parts)],[money(t.tax)],[money(t.total)],[money(paid)],[money(r2(t.total-paid))]]:[[laborHrs(j).toFixed(1)]])); });
+    const days={}; done.forEach(j=>{ const d=new Date(doneAt(j)); d.setHours(0,0,0,0); const x=days[d.getTime()]=days[d.getTime()]||{jobs:0,labor:0,parts:0,tax:0,total:0,hrs:0,l:[]}; const t=tot(j); x.jobs++; x.l.push(j); x.labor+=t.labor; x.parts+=t.parts; x.tax+=t.tax; x.total+=t.total; x.hrs+=laborHrs(j); });
+    const dayRows=Object.entries(days).sort((a,b)=>a[0]-b[0]).map(([k,x])=>trowT([new Date(+k).toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"}),[x.jobs],[x.hrs.toFixed(1)]].concat(fin?[[money(r2(x.labor))],[money(r2(x.parts))],[money(r2(x.tax))],[money(r2(x.total))],[money(r2(x.total/x.jobs))]]:[]),x.l));
+    const reg=done.slice().sort((a,b)=>doneAt(a)-doneAt(b)).map(j=>{ const t=tot(j), paid=paidOf(j); return trow1([dt(doneAt(j)),no(j),name(j),esc(vehOf(j))].concat(fin?[[money(t.labor)],[money(t.parts)],[money(t.tax)],[money(t.total)],[money(paid)],[money(r2(t.total-paid))]]:[[laborHrs(j).toFixed(1)]]),j); });
     const regFoot=fin?trow(["<b>Total</b>","","","",[`<b>${money(sales.labor)}</b>`],[`<b>${money(sales.parts)}</b>`],[`<b>${money(sales.tax)}</b>`],[`<b>${money(sales.total)}</b>`],[`<b>${money(sum(done,j=>paidOf(j)))}</b>`],[`<b>${money(r2(sales.total-sum(done,j=>paidOf(j))))}</b>`]]):"";
-    const jt={}; done.forEach(j=>jobGroups(j).forEach(g=>{ if(g.key==="parts") return; const k=String(g.title||"").trim().toLowerCase().replace(/\s+/g," "); if(!k) return; const x=jt[k]=jt[k]||{t:g.title,n:0,lab:0,par:0,total:0,hrs:0}; x.n++; x.lab+=g.lab; x.par+=g.par; x.total+=g.total; x.hrs+=g.labor.reduce((s,l)=>s+Number(l[1]||0),0); }));
-    const makes={}; done.forEach(j=>{ const m=(j.make||"Other").trim()||"Other", x=makes[m]=makes[m]||{n:0,total:0,hrs:0}; x.n++; x.total+=tot(j).total; x.hrs+=laborHrs(j); });
+    const jt={}; done.forEach(j=>jobGroups(j).forEach(g=>{ if(g.key==="parts") return; const k=String(g.title||"").trim().toLowerCase().replace(/\s+/g," "); if(!k) return; const x=jt[k]=jt[k]||{l:[],t:g.title,n:0,lab:0,par:0,total:0,hrs:0}; x.n++; if(!x.l.includes(j)) x.l.push(j); x.lab+=g.lab; x.par+=g.par; x.total+=g.total; x.hrs+=g.labor.reduce((s,l)=>s+Number(l[1]||0),0); }));
+    const makes={}; done.forEach(j=>{ const m=(j.make||"Other").trim()||"Other", x=makes[m]=makes[m]||{n:0,total:0,hrs:0,l:[]}; x.n++; x.l.push(j); x.total+=tot(j).total; x.hrs+=laborHrs(j); });
     S.sales=card("Sales by day", tbl([["Day"],["Cars","num"],["Billed hrs","num"]].concat(fin?[["Labor","num"],["Parts","num"],["Tax","num"],["Total","num"],["ARO","num"]]:[]), dayRows))
       +card("Invoice register", tbl([["Date"],["Invoice"],["Customer"],["Vehicle"]].concat(fin?[["Labor","num"],["Parts","num"],["Tax","num"],["Total","num"],["Paid","num"],["Balance","num"]]:[["Billed hrs","num"]]), reg, regFoot), "Every completed work order in this period, like the Mitchell 1 sales journal.")
       +card("Top jobs sold", tbl([["Job"],["Times sold","num"],["Hours","num"]].concat(fin?[["Labor","num"],["Parts","num"],["Total","num"],["Avg","num"]]:[]),
-        Object.values(jt).sort((a,b)=>fin?b.total-a.total:b.n-a.n).slice(0,30).map(x=>trow([esc(x.t),[x.n],[x.hrs.toFixed(1)]].concat(fin?[[money(r2(x.lab))],[money(r2(x.par))],[money(r2(x.total))],[money(r2(x.total/x.n))]]:[])))))
+        Object.values(jt).sort((a,b)=>fin?b.total-a.total:b.n-a.n).slice(0,30).map(x=>trowT([esc(x.t),[x.n],[x.hrs.toFixed(1)]].concat(fin?[[money(r2(x.lab))],[money(r2(x.par))],[money(r2(x.total))],[money(r2(x.total/x.n))]]:[]),x.l))))
       +card("Sales by vehicle make", tbl([["Make"],["Cars","num"],["Billed hrs","num"]].concat(fin?[["Sales","num"],["ARO","num"]]:[]),
-        Object.entries(makes).sort((a,b)=>b[1].n-a[1].n).map(([m,x])=>trow([esc(m),[x.n],[x.hrs.toFixed(1)]].concat(fin?[[money(r2(x.total))],[money(r2(x.total/x.n))]]:[])))))
+        Object.entries(makes).sort((a,b)=>b[1].n-a[1].n).map(([m,x])=>trowT([esc(m),[x.n],[x.hrs.toFixed(1)]].concat(fin?[[money(r2(x.total))],[money(r2(x.total/x.n))]]:[]),x.l))))
       +(fin?card("Sales tax", kv([["Taxable parts sales",money(sales.parts)],[`Sales tax collected (${+(SET().tax*100).toFixed(3)}%)`,money(sales.tax)],["Non-taxable labor",money(sales.labor)],["Discounts",money(sales.disc)]]))
-        +card("Discounts given", tbl([["Date"],["Invoice"],["Customer"],["Reason"],["Amount","num"]], done.filter(j=>tot(j).discount>0).map(j=>trow([dt(doneAt(j)),no(j),name(j),esc((j.discounts||[]).map(d=>d.desc||"Discount").join(", ")),[money(tot(j).discount)]])))):"");
+        +card("Discounts given", tbl([["Date"],["Invoice"],["Customer"],["Reason"],["Amount","num"]], done.filter(j=>tot(j).discount>0).map(j=>trow1([dt(doneAt(j)),no(j),name(j),esc((j.discounts||[]).map(d=>d.desc||"Discount").join(", ")),[money(tot(j).discount)]],j)))):"");
 
+    S.overview+=card("Tickets in this report", tbl([["Date"],["Invoice"],["Customer"],["Vehicle"]].concat(fin?[["Labor","num"],["Parts","num"],["Tax","num"],["Total","num"],["Paid","num"],["Balance","num"]]:[["Billed hrs","num"]]), reg, regFoot), "Every completed work order counted in the numbers above. Tap a number or a row to see its tickets.");
     // ---- Payments ----
     if(fin){
-      const byM={}; pays.forEach(p=>{ const x=byM[p.method||"other"]=byM[p.method||"other"]||{n:0,amt:0,fee:0}; x.n++; x.amt+=Number(p.amount||0); x.fee+=Number(p.fee||0); });
-      S.payments=card("Payments by method", tbl([["Method"],["Payments","num"],["Amount","num"],["Card fees","num"]], Object.entries(byM).sort((a,b)=>b[1].amt-a[1].amt).map(([m,x])=>trow([esc(payLabel(m)),[x.n],[money(r2(x.amt))],[money(r2(x.fee))]])),
+      const byM={}; pays.forEach(p=>{ const x=byM[p.method||"other"]=byM[p.method||"other"]||{n:0,amt:0,fee:0,l:[]}; x.n++; { const pj=db.jobs.find(y=>y.id===p.wo_id); if(pj&&!x.l.includes(pj)) x.l.push(pj); } x.amt+=Number(p.amount||0); x.fee+=Number(p.fee||0); });
+      S.payments=card("Payments by method", tbl([["Method"],["Payments","num"],["Amount","num"],["Card fees","num"]], Object.entries(byM).sort((a,b)=>b[1].amt-a[1].amt).map(([m,x])=>trowT([esc(payLabel(m)),[x.n],[money(r2(x.amt))],[money(r2(x.fee))]],x.l)),
           trow(["<b>Total</b>",[pays.length],[`<b>${money(collected)}</b>`],[money(r2(pays.reduce((s,p)=>s+Number(p.fee||0),0)))]])))
-        +card("Payment list", tbl([["Date"],["Invoice"],["Customer"],["Method"],["Amount","num"]], pays.slice().sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))).map(p=>{ const j=db.jobs.find(x=>x.id===p.wo_id)||{}; return trow([new Date(p.created_at).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}),no(j),name(j),esc(payLabel(p.method)),[money(Number(p.amount||0))]]); })))
+        +card("Payment list", tbl([["Date"],["Invoice"],["Customer"],["Method"],["Amount","num"]], pays.slice().sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))).map(p=>{ const j=db.jobs.find(x=>x.id===p.wo_id)||{}; return trow1([new Date(p.created_at).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}),no(j),name(j),esc(payLabel(p.method)),[money(Number(p.amount||0))]],j); })))
         +card("Unpaid balances (accounts receivable)", tbl([["Completed"],["Invoice"],["Customer"],["Phone"],["Status"],["Total","num"],["Paid","num"],["Balance","num"],["Days","num"]],
-          owing.sort((a,b)=>doneAt(a.j)-doneAt(b.j)).map(({j,bal})=>trow([dt(doneAt(j)),no(j),name(j),`<span class="mono">${esc(fmtPhone((custOf(j)||{}).phone)||"")}</span>`,statusPill(j.status),[money(tot(j).total)],[money(paidOf(j))],[`<b>${money(bal)}</b>`],[Math.max(0,Math.floor((Date.now()-doneAt(j))/86400000))]])),
+          owing.sort((a,b)=>doneAt(a.j)-doneAt(b.j)).map(({j,bal})=>trow1([dt(doneAt(j)),no(j),name(j),`<span class="mono">${esc(fmtPhone((custOf(j)||{}).phone)||"")}</span>`,statusPill(j.status),[money(tot(j).total)],[money(paidOf(j))],[`<b>${money(bal)}</b>`],[Math.max(0,Math.floor((Date.now()-doneAt(j))/86400000))]],j)),
           trow(["<b>Total</b>","","","","","","",[`<b>${money(r2(owing.reduce((s,x)=>s+x.bal,0)))}</b>`],""])), "All time: every finished car with money still owed, oldest first. Imported Mitchell 1 work orders count here until their payments are recorded.");
     } else S.payments=card("Payments", '<div class="muted">Payment reports are for owners.</div>');
 
@@ -3231,7 +3242,7 @@
       S.profit=(fin?card("Shop gross profit", kv([["Sales before tax",money(exTax)],["\u2212 Parts cost",money(pCost)],["\u2212 Team pay (this period)",money(payroll)],["Gross profit",`<b>${money(gp)}</b>`],["Gross profit %",gpPct+"%"],["Gross profit per car",money(done.length?r2(gp/done.length):0)],["Gross profit per billed hour",money(hrsBilled?r2(gp/hrsBilled):0)]]),
           "Team pay comes from each team member's pay setup (hourly and flag hours) for the same dates."):"")
         +card("Profit by invoice", tbl([["Date"],["Invoice"],["Customer"],["Labor","num"],["Parts","num"],["Parts cost","num"],["Parts profit","num"],["Parts margin","num"]],
-          inv.sort((a,b)=>doneAt(a.j)-doneAt(b.j)).map(x=>trow([dt(doneAt(x.j)),no(x.j),name(x.j),[money(x.t.labor)],[money(x.t.parts)],[money(x.c)+(x.miss?" *":"")],[money(x.pg)],[pct(x.pg,x.t.parts)]]))), "* some parts on that invoice have no cost entered.")
+          inv.sort((a,b)=>doneAt(a.j)-doneAt(b.j)).map(x=>trow1([dt(doneAt(x.j)),no(x.j),name(x.j),[money(x.t.labor)],[money(x.t.parts)],[money(x.c)+(x.miss?" *":"")],[money(x.pg)],[pct(x.pg,x.t.parts)]],x.j))), "* some parts on that invoice have no cost entered.")
         +moreReports(R, done, open, fin, card, tbl, "profit");
     } else S.profit=card("Profit", '<div class="muted">Profit reports are for owners and managers.</div>');
 
@@ -3239,30 +3250,30 @@
     const techs=db.users.filter(u=>worksOnCars(u)||msInRange(u.id,R.a,R.b)>0).map(u=>{
       const clocked=msInRange(u.id,R.a,R.b), onjobs=jobMsInRange(u.id,R.a,R.b), mine=done.filter(j=>onCrew(j,u.id));
       const billed=mine.reduce((s,j)=>s+laborHrs(j)/crewIds(j).length,0), paid=mine.reduce((s,j)=>s+techHrs(j)/crewIds(j).length,0);
-      return {u,clocked,onjobs,billed,paid,cars:mine.length,labor:r2(mine.reduce((s,j)=>s+tot(j).labor/crewIds(j).length,0)),parts:r2(mine.reduce((s,j)=>s+tot(j).parts/crewIds(j).length,0)),ot:Math.max(0,clocked-40*3600000),pay:fin?payFor(u.id,R.a,R.b).total:0};
+      return {u,mine,clocked,onjobs,billed,paid,cars:mine.length,labor:r2(mine.reduce((s,j)=>s+tot(j).labor/crewIds(j).length,0)),parts:r2(mine.reduce((s,j)=>s+tot(j).parts/crewIds(j).length,0)),ot:Math.max(0,clocked-40*3600000),pay:fin?payFor(u.id,R.a,R.b).total:0};
     });
     const h=ms=>(ms/3600000).toFixed(1);
     S.techs=card("Technician productivity &amp; efficiency", tbl([["Technician"],["Clocked hrs","num"],["On jobs hrs","num"],["Billed hrs","num"],["Tech hrs","num"],["Productivity","num"],["Efficiency","num"],["Over 40 hrs","num"]],
-        techs.map(t=>trow([esc(t.u.name),[h(t.clocked)],[h(t.onjobs)],[t.billed.toFixed(1)],[t.paid.toFixed(1)],[pct(t.onjobs,t.clocked)],[t.onjobs?Math.round(t.billed/(t.onjobs/3600000)*100)+"%":"\u2013"],[h(t.ot)]]))),
+        techs.map(t=>trowT([esc(t.u.name),[h(t.clocked)],[h(t.onjobs)],[t.billed.toFixed(1)],[t.paid.toFixed(1)],[pct(t.onjobs,t.clocked)],[t.onjobs?Math.round(t.billed/(t.onjobs/3600000)*100)+"%":"\u2013"],[h(t.ot)]],t.mine))),
         "Productivity = time on jobs \u00f7 time clocked. Efficiency = hours billed \u00f7 time on jobs (over 100% means beating book time). Shared jobs are split evenly.")
       +(fin?card("Sales by technician", tbl([["Technician"],["Cars","num"],["Billed hrs","num"],["Labor sold","num"],["Parts sold","num"],["Team pay","num"],["Labor profit","num"],["Labor $ per clocked hr","num"]],
-        techs.filter(t=>t.cars||t.clocked||t.pay).map(t=>trow([esc(t.u.name),[t.cars],[t.billed.toFixed(1)],[money(t.labor)],[money(t.parts)],[money(t.pay)],[money(r2(t.labor-t.pay))],[t.clocked?money(r2(t.labor/(t.clocked/3600000))):"\u2013"]]))))
-        :card("Work by technician", tbl([["Technician"],["Cars","num"],["Billed hrs","num"]], techs.filter(t=>t.cars).map(t=>trow([esc(t.u.name),[t.cars],[t.billed.toFixed(1)]])))));
+        techs.filter(t=>t.cars||t.clocked||t.pay).map(t=>trowT([esc(t.u.name),[t.cars],[t.billed.toFixed(1)],[money(t.labor)],[money(t.parts)],[money(t.pay)],[money(r2(t.labor-t.pay))],[t.clocked?money(r2(t.labor/(t.clocked/3600000))):"\u2013"]],t.mine))))
+        :card("Work by technician", tbl([["Technician"],["Cars","num"],["Billed hrs","num"]], techs.filter(t=>t.cars).map(t=>trowT([esc(t.u.name),[t.cars],[t.billed.toFixed(1)]],t.mine)))));
 
     // ---- Customers ----
-    const cs={}; done.forEach(j=>{ if(!j.customerId) return; const x=cs[j.customerId]=cs[j.customerId]||{n:0,total:0}; x.n++; x.total+=tot(j).total; });
+    const cs={}; done.forEach(j=>{ if(!j.customerId) return; const x=cs[j.customerId]=cs[j.customerId]||{n:0,total:0,l:[]}; x.n++; x.l.push(j); x.total+=tot(j).total; });
     const lastVisit={}; db.jobs.filter(j=>doneWO(j)&&j.customerId).forEach(j=>{ const t=doneAt(j); if(!lastVisit[j.customerId]||t>lastVisit[j.customerId].t) lastVisit[j.customerId]={t,j}; });
     const lapsed=Object.entries(lastVisit).filter(([id,x])=>Date.now()-x.t>180*86400000&&!open.some(o=>o.customerId===id)).sort((a,b)=>b[1].t-a[1].t).slice(0,100);
     const visits={}; db.jobs.filter(doneWO).forEach(j=>visits[j.customerId]=(visits[j.customerId]||0)+1);
     S.customers=card("Customer summary", kv([["Customers served",servedIds.length],["New customers (first visit)",newCust],["Returning customers",servedIds.length-newCust],["Repeat customers, all time (2+ visits)",Object.values(visits).filter(n=>n>1).length],["Customers on file",db.customers.length]]))
       +card("Top customers", tbl([["Customer"],["Phone"],["Visits","num"]].concat(fin?[["Spent","num"]]:[]),
-        Object.entries(cs).sort((a,b)=>fin?b[1].total-a[1].total:b[1].n-a[1].n).slice(0,25).map(([id,x])=>{ const c=db.customers.find(y=>y.id===id)||{}; return trow([esc(c.name||"\u2014"),`<span class="mono">${esc(fmtPhone(c.phone)||"")}</span>`,[x.n]].concat(fin?[[money(r2(x.total))]]:[])); })))
-      +card("Customers due for a visit", tbl([["Customer"],["Phone"],["Last vehicle"],["Last visit","num"]], lapsed.map(([id,x])=>{ const c=db.customers.find(y=>y.id===id)||{}; return trow([esc(c.name||"\u2014"),`<span class="mono">${esc(fmtPhone(c.phone)||"")}</span>`,esc(vehOf(x.j)),[new Date(x.t).toLocaleDateString()]]); })),
+        Object.entries(cs).sort((a,b)=>fin?b[1].total-a[1].total:b[1].n-a[1].n).slice(0,25).map(([id,x])=>{ const c=db.customers.find(y=>y.id===id)||{}; return trowT([esc(c.name||"\u2014"),`<span class="mono">${esc(fmtPhone(c.phone)||"")}</span>`,[x.n]].concat(fin?[[money(r2(x.total))]]:[]),x.l); })))
+      +card("Customers due for a visit", tbl([["Customer"],["Phone"],["Last vehicle"],["Last visit","num"]], lapsed.map(([id,x])=>{ const c=db.customers.find(y=>y.id===id)||{}; return trow1([esc(c.name||"\u2014"),`<span class="mono">${esc(fmtPhone(c.phone)||"")}</span>`,esc(vehOf(x.j)),[new Date(x.t).toLocaleDateString()]],x.j); })),
         "Haven't been in for 6+ months and have no open work order. Good list for a service reminder text.");
 
     // ---- Estimates ----
     const declinedRows=[]; ers.forEach(r=>{ const s=r.snapshot||{}, j=db.jobs.find(x=>x.id===r.wo_id)||{}, c=custOf(j)||{}; const keys=r.status==="declined"?(s.jobs||[]).map(x=>x.key):(r.declined_jobs||[]).map(String);
-      (s.jobs||[]).filter(x=>keys.includes(String(x.key))).forEach(x=>declinedRows.push(trow([dt(new Date(r.decided_at||r.created_at).getTime()),esc(c.name||s.customer||"\u2014"),`<span class="mono">${esc(fmtPhone(c.phone)||"")}</span>`,esc(s.vehicle||vehOf(j)),esc(x.title||"")].concat(fin?[[money(Number(x.total||0))]]:[])))); });
+      (s.jobs||[]).filter(x=>keys.includes(String(x.key))).forEach(x=>declinedRows.push(trow1([dt(new Date(r.decided_at||r.created_at).getTime()),esc(c.name||s.customer||"\u2014"),`<span class="mono">${esc(fmtPhone(c.phone)||"")}</span>`,esc(s.vehicle||vehOf(j)),esc(x.title||"")].concat(fin?[[money(Number(x.total||0))]]:[]),j))); });
     S.estimates=card("Close ratio", kv([["Estimates sent",ers.length],["Approved",ers.filter(r=>r.status==="approved").length],["Declined",ers.filter(r=>r.status==="declined").length],["Still waiting on customer",ers.filter(r=>r.status==="sent").length],
         ["Approval rate (by count)",pct(ers.filter(r=>r.status==="approved").length,decided.length)]].concat(fin?[["Written (decided estimates)",money(written)],["Approved",money(approvedV)],["Close ratio (by dollars)",close]]:[])),
         "Close ratio = dollars approved \u00f7 dollars written, the Tekmetric way.")
@@ -3279,10 +3290,10 @@
 
     // ---- Work in progress ----
     const now=Date.now();
-    S.wip=card("Work orders right now", tbl([["Status"],["Count","num"]].concat(fin?[["Value","num"]]:[]), STATUS.filter(s=>s[0]!=="picked_up").map(([k])=>{ const l=db.jobs.filter(j=>isWO(j)&&j.status===k); return trow([statusPill(k),[l.length]].concat(fin?[[money(sum(l,"total"))]]:[])); })))
+    S.wip=card("Work orders right now", tbl([["Status"],["Count","num"]].concat(fin?[["Value","num"]]:[]), STATUS.filter(s=>s[0]!=="picked_up").map(([k])=>{ const l=db.jobs.filter(j=>isWO(j)&&j.status===k); return trowT([statusPill(k),[l.length]].concat(fin?[[money(sum(l,"total"))]]:[]),l); })))
       +card("Open work orders by age", tbl([["Invoice"],["Customer"],["Vehicle"],["Status"],["Technician"],["Days open","num"]].concat(fin?[["Value","num"]]:[]),
-        open.map(j=>({j,d:Math.max(0,Math.floor((now-new Date((j.date||todayStr())+"T00:00").getTime())/86400000))})).sort((a,b)=>b.d-a.d).map(({j,d})=>trow([no(j),name(j),esc(vehOf(j)),statusPill(j.status),esc(crewNames(j)),[d]].concat(fin?[[money(tot(j).total)]]:[])))))
-      +card("Waiting on parts", tbl([["Customer"],["Vehicle"],["Job"],["Technician"]], open.filter(j=>j.status==="waiting_parts").map(j=>trow([name(j),esc(vehOf(j)),esc(j.title),esc(crewNames(j))]))))
+        open.map(j=>({j,d:Math.max(0,Math.floor((now-new Date((j.date||todayStr())+"T00:00").getTime())/86400000))})).sort((a,b)=>b.d-a.d).map(({j,d})=>trow1([no(j),name(j),esc(vehOf(j)),statusPill(j.status),esc(crewNames(j)),[d]].concat(fin?[[money(tot(j).total)]]:[]),j))))
+      +card("Waiting on parts", tbl([["Customer"],["Vehicle"],["Job"],["Technician"]], open.filter(j=>j.status==="waiting_parts").map(j=>trow1([name(j),esc(vehOf(j)),esc(j.title),esc(crewNames(j))],j))))
       +moreReports(R, done, open, fin, card, tbl, "wip");
 
     // ---- Our cars: the cars we buy, fix and sell (customer "Citea Motors"): time, parts, labor and profit per car (owners only)
@@ -3300,6 +3311,8 @@
       ${S[cat]||S.overview}
       ${cat==="estimates"?apprByCustomer():""}`;
     $("#repPrint").onclick=()=>window.print();
+    $("#view").querySelectorAll("[data-tix]").forEach(el=>el.onclick=()=>{ const t=el.dataset.tixt||((el.querySelector("td")||el).textContent||"").trim(); repTickets(t.replace(/<[^>]*>/g,""), jobsById(TX[+el.dataset.tix]), R, fin); });
+    $("#view").querySelectorAll("[data-wo1]").forEach(el=>el.onclick=()=>{ openWO.from="reports"; openWO(el.dataset.wo1); });
     $("#view").querySelectorAll("[data-range]").forEach(b=>b.onclick=()=>{ viewReports.range=b.dataset.range; if(b.dataset.range==="custom"&&!viewReports.from){ viewReports.from=todayStr(weekStart()); viewReports.to=todayStr(); } viewReports(); });
     $("#view").querySelectorAll("[data-rcat]").forEach(b=>b.onclick=()=>{ viewReports.cat=b.dataset.rcat; viewReports(); window.scrollTo(0,0); });
     const rf=$("#repFrom"), rt=$("#repTo"); if(rf) rf.onchange=()=>{ viewReports.from=rf.value; if(viewReports.to<rf.value) viewReports.to=rf.value; viewReports(); }; if(rt) rt.onchange=()=>{ viewReports.to=rt.value; viewReports(); };
@@ -3309,10 +3322,24 @@
     // CSV of any report table (opens in Excel / Google Sheets / QuickBooks)
     $("#view").querySelectorAll("[data-csv]").forEach(b=>b.onclick=()=>{ const t=b.closest(".rep-card").querySelector("table"); if(!t) return;
       const q=v=>{ v=String(v).replace(/\s+/g," ").trim(); return /[",\n]/.test(v)?`"${v.replace(/"/g,'""')}"`:v; };
-      const csv=[...t.querySelectorAll("tr")].map(tr=>[...tr.children].map(c=>q(c.textContent)).join(",")).join("\r\n");
+      const csv=[...t.querySelectorAll("tr")].map(tr=>[...tr.children].map(c=>{ const k=c.cloneNode(true); k.querySelectorAll(".tix-n").forEach(x=>x.remove()); return q(k.textContent); }).join(",")).join("\r\n");
       const a=document.createElement("a"); a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv"})); a.download=`Citea ${b.dataset.csv} ${todayStr(new Date(R.a))}.csv`.replace(/[\\/:*?"<>|]/g,"-"); document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },500); });
   }
   // every approval and decline, grouped by customer (all time)
+  // the tickets behind a report number
+  const jobsById=ids=>(ids||[]).map(id=>db.jobs.find(j=>j.id===id)).filter(Boolean);
+  function repTickets(title, list, R, fin){
+    const tot=woTotals; list=list.slice().sort((a,b)=>doneAt(a)-doneAt(b));
+    const rows=list.map(j=>{ const t=tot(j), paid=paidOf(j);
+      return `<tr class="click" data-o="${j.id}"><td>${new Date(doneAt(j)).toLocaleDateString([],{month:"short",day:"numeric"})}</td><td class="mono">${j.number?"#"+esc(j.number):""}</td><td>${esc((custOf(j)||{}).name||"\u2014")}<div class="muted" style="font-size:12px">${esc(vehOf(j))}</div></td><td>${statusPill(j.status)}</td>`
+        +(fin?`<td class="num">${money(t.total)}</td><td class="num">${money(r2(t.total-paid))}</td>`:`<td class="num">${laborHrs(j).toFixed(1)}</td>`)+`</tr>`; }).join("");
+    const foot=fin?`<tr><td colspan="4"><b>Total</b></td><td class="num"><b>${money(r2(list.reduce((s,j)=>s+tot(j).total,0)))}</b></td><td class="num"><b>${money(r2(list.reduce((s,j)=>s+tot(j).total-paidOf(j),0)))}</b></td></tr>`
+      :`<tr><td colspan="4"><b>Total</b></td><td class="num"><b>${list.reduce((s,j)=>s+laborHrs(j),0).toFixed(1)}</b></td></tr>`;
+    modal(`<div class="row" style="margin-bottom:4px"><h2 style="margin:0">${esc(title)}</h2><span class="spacer"></span><button class="btn ghost sm" data-close type="button">Close</button></div>
+      <div class="muted" style="margin-bottom:10px">${list.length} ticket${list.length===1?"":"s"} \u00b7 ${esc(R.label)} \u00b7 tap one to open it</div>
+      <div class="tablewrap"><table><thead><tr><th>Date</th><th>Invoice</th><th>Customer / vehicle</th><th>Status</th>${fin?`<th class="num">Total</th><th class="num">Balance</th>`:`<th class="num">Billed hrs</th>`}</tr></thead><tbody>${rows||`<tr><td colspan="6" class="muted">No tickets.</td></tr>`}${list.length?foot:""}</tbody></table></div>`,
+      m=>{ m.classList.add("wide"); m.querySelectorAll("[data-o]").forEach(tr=>tr.onclick=()=>{ closeModal(); openWO.from="reports"; openWO(tr.dataset.o); }); });
+  }
   function apprByCustomer(){
     const by={};
     (db.estimates||[]).filter(r=>r.status!=="cancelled").forEach(r=>{ const j=db.jobs.find(x=>x.id===r.wo_id); const cid=(j&&j.customerId)||"?"; (by[cid]=by[cid]||[]).push(r); });
@@ -5369,7 +5396,7 @@
       <div class="mtabs wotabs" role="tablist">${[["cv","Customer & vehicle"],["jobs","Jobs"],["det","Work order details"]].map(([k,l])=>`<button type="button" role="tab" data-wotab="${k}" class="${woTab===k?"on":""}">${l}</button>`).join("")}</div>
       <div class="ro-top">
         <div class="ro-title">
-          <button class="btn ghost sm" id="woBack">\u2039 Board</button>
+          <button class="btn ghost sm" id="woBack">\u2039 ${openWO.from==="reports"?"Reports":"Board"}</button>
           <div style="min-width:0"><h2>${existing?esc((cust||{}).name||"\u2014")+" \u00b7 "+esc(vehOf(j)):"New work order"}</h2>
             <div class="sub">${existing&&j.number?`<span class="mono wo-no">${j.status==="estimate"?"Estimate":"Invoice"} #${esc(j.number)}</span> \u00b7 `:""}${existing?esc(j.title):"Pick or add the customer and vehicle, then build the job."}</div></div>
           <span class="spacer"></span>
@@ -5511,7 +5538,7 @@
       paintFields(); const vw=$("#view"); vw.oninput=vw.onchange=e=>{ if(e.target&&e.target.matches&&e.target.matches("input,select,textarea")){ paintField(e.target); autoSave(); } };
       if(lastSig===null){ pull(); lastSig=sigOf(); } else autoSave();
       document.querySelectorAll("[data-wotab]").forEach(b=>b.onclick=()=>setWoTab(b.dataset.wotab));
-      $("#woBack").onclick=$("#woCancel").onclick=()=>{ autoNow(); show("wip"); };
+      $("#woBack").onclick=$("#woCancel").onclick=()=>{ autoNow(); show(openWO.from||"wip"); };
       $("#view").querySelectorAll("[data-step]").forEach(b=>b.onclick=()=>{ pull(); if(needsSig(j,b.dataset.step)) return toast(SIG_MSG); j.status=b.dataset.step; render(); });
       const pickCust=c=>{ pull(); newCust=false; j.customerId=c.id; delete j._cName; delete j._cPhone; delete j._cEmail; delete j._cTextOk;
         const vs=db.vehicles.filter(v=>v.customerId===c.id); if(vs.length===1){ fillVeh(vs[0]); newVeh=false; } else { j.vehicleId=""; newVeh=!vs.length; }
