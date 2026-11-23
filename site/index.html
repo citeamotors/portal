@@ -379,6 +379,11 @@
   td.num,th.num{text-align:right}
   .tablewrap{overflow-x:auto}
   tr.click,.click{cursor:pointer}
+  .clean-card{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:14px 16px}
+  .clean-card .clean-ic{font-size:24px;line-height:1}
+  .clean-card .clean-txt{flex:1;min-width:0;display:flex;flex-direction:column}
+  .clean-card .clean-txt span{font-size:13px;color:var(--steel,#686868)}
+  .clean-card.on{border-left:4px solid #16A34A}
   .tix-n{font-size:11.5px;color:var(--steel,#686868);white-space:nowrap;margin-left:6px}
   .rep-kpis .stat.click:hover{background:var(--paper)}
   tr.click:hover td{background:var(--paper)}
@@ -1589,6 +1594,22 @@
   const runningTask = u => db.jobTime.find(s=>s.userId===u && !s.end);
   const jobMs = (jobId,u) => db.jobTime.filter(s=>s.jobId===jobId && (!u||s.userId===u)).reduce((a,s)=>a+((s.end||Date.now())-s.start),0);
   function stopTask(u){ const s=runningTask(u); if(s) s.end=Date.now(); return s; }
+  /* ---------- shop cleaning: a permanent task techs time like a job (job_time with job_id "shop-cleaning") ---------- */
+  const CLEAN_ID="shop-cleaning", CLEAN_JOB={id:CLEAN_ID,title:"Shop cleaning",labor:[],parts:[],done:false};
+  const isClean=s=>!!s&&s.jobId===CLEAN_ID;
+  function cleanMs(u,a,b){ let t=0; const now=Date.now(); for(const s of db.jobTime){ if(s.jobId!==CLEAN_ID||(u&&s.userId!==u)) continue; const x=Math.max(s.start,a), y=Math.min(s.end||now,b); if(y>x) t+=y-x; } return t; }
+  function cleanCardHTML(){
+    if(!me||me.dbRole==="owner") return "";
+    const r=runningTask(me.id), on=isClean(r), wk=cleanMs(me.id,payWeekStart().getTime(),Date.now());
+    return `<div class="card clean-card${on?" on":""}"><div class="clean-ic" aria-hidden="true">\ud83e\uddf9</div><div class="clean-txt"><b>Shop cleaning</b><span>${on?`Cleaning now \u00b7 started ${fmtTime(r.start)}`:`This week: ${fmtDur(wk)}`}</span></div>`
+      +(on?'<button class="btn sm" data-clean="stop" type="button">Stop cleaning</button>':'<button class="btn sm ghost" data-clean="start" type="button">Start cleaning</button>')+`</div>`;
+  }
+  document.addEventListener("click",async e=>{ const b=e.target.closest&&e.target.closest("[data-clean]"); if(!b||!me) return; b.disabled=true;
+    if(b.dataset.clean==="start"){
+      if(!openPunch(me.id)){ if(!await clockIn()){ b.disabled=false; return; } toast("Clocked you in and started cleaning"); } else toast("Started cleaning the shop");
+      stopTask(me.id); db.jobTime.push({id:uid(),userId:me.id,jobId:CLEAN_ID,lineKey:null,start:Date.now(),end:null});
+    } else { const r=runningTask(me.id); if(isClean(r)){ r.end=Date.now(); toast("Cleaning logged: "+fmtDur(r.end-r.start)); } }
+    save(); updateChrome(); show(tab); });
   /* ---------- geofence: 3274 Palm Parkway, Las Vegas NV 89104 ---------- */
   const SHOP_GEO={lat:36.149158,lon:-115.10199,radius:61};
   function distM(a,b,c,d){ const R=6371000,r=x=>x*Math.PI/180,dl=r(c-a),dn=r(d-b),h=Math.sin(dl/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dn/2)**2; return 2*R*Math.asin(Math.sqrt(h)); }
@@ -1651,7 +1672,7 @@
   }
   function jobMsInRange(userId, from, to){
     let total=0; const now=Date.now();
-    for(const s of db.jobTime){ if(s.userId!==userId) continue;
+    for(const s of db.jobTime){ if(s.userId!==userId||s.jobId===CLEAN_ID) continue;
       const a=Math.max(s.start,from), b=Math.min(s.end||now,to); if(b>a) total+=b-a; }
     return total;
   }
@@ -2019,7 +2040,7 @@
               <div class="stat"><b>${fmtDur(week)}</b><span>This week</span></div>
               <div class="stat"><b>${fmtDur(jobMsInRange(me.id,t0.getTime(),now))}</b><span>On jobs today</span></div>
             </div>
-            ${(()=>{ const s=runningTask(me.id), j=s&&db.jobs.find(x=>x.id===s.jobId); return j?`<div class="now-job"><div><span class="pill green">Working on</span> <b>${esc(j.title)}</b><div class="muted" style="font-size:13px">${esc(vehOf(j))} \u00b7 ${fmtDur(now-s.start)} this stretch</div></div><button class="btn ghost sm" data-go-jobs>Go to job</button></div>`:`<div class="muted" style="font-size:13px;margin-top:14px">Not on a job. Open a car on <b>My jobs</b> and tap <b>Start job</b> to track its time.</div>`; })()}
+            ${(()=>{ const s=runningTask(me.id), j=s&&db.jobs.find(x=>x.id===s.jobId); if(isClean(s)) return `<div class="now-job"><div><span class="pill green">Cleaning the shop</span><div class="muted" style="font-size:13px">${fmtDur(now-s.start)} this stretch</div></div><button class="btn sm" data-clean="stop" type="button">Stop cleaning</button></div>`; return j?`<div class="now-job"><div><span class="pill green">Working on</span> <b>${esc(j.title)}</b><div class="muted" style="font-size:13px">${esc(vehOf(j))} \u00b7 ${fmtDur(now-s.start)} this stretch</div></div><button class="btn ghost sm" data-go-jobs>Go to job</button></div>`:`<div class="muted" style="font-size:13px;margin-top:14px">Not on a job. Open a car on <b>My jobs</b> and tap <b>Start job</b> to track its time.</div>`; })()}
           </div>
           <div style="display:flex;flex-direction:column;gap:16px;min-width:0">${isFin()?myPayCard():""}<div class="card">
             <h2>Recent punches</h2>
@@ -2146,7 +2167,7 @@
     let sel=viewJobs.sel; if(!lists[sel]) sel=lists.wip.length?"wip":"new"; viewJobs.sel=sel;
     const TABS=[["new","New"],["wip","In progress"],["done","Finished"]], list=lists[sel];
     const EMPTY={new:"No new jobs. Check with your manager.",wip:"Nothing in progress. Start a job from New.",done:"No finished jobs in the last 7 days."};
-    $("#view").innerHTML = `${clockBarHTML()}<div class="card">
+    $("#view").innerHTML = `${clockBarHTML()}${cleanCardHTML()}<div class="card">
       <div class="row" style="margin-bottom:10px"><h2 style="margin:0">${me.role==="manager"?"All jobs":"My jobs"}</h2></div>
       <div class="jtabs" role="tablist">${TABS.map(([k,l])=>`<button type="button" role="tab" class="${k===sel?"on":""}" aria-selected="${k===sel}" data-jtab="${k}">${l}<span>${lists[k].length}</span></button>`).join("")}</div>
       ${list.length? `<div class="tjlist">${list.map(tjCardHTML).join("")}</div>` : `<div class="empty">${EMPTY[sel]}</div>`}
@@ -2289,7 +2310,7 @@
     // who is busy right now: working a car first, then clocked in but free, then not clocked in
     const now=Date.now(), today=date===todayStr();
     const stat=u=>{ const run=db.jobTime.filter(t=>t.userId===u.id&&!t.end).sort((a,b)=>a.start-b.start)[0], j=run&&db.jobs.find(x=>x.id===run.jobId);
-      if(today&&run) return {k:0,run,j,label:j?([j.year,j.make,j.model].filter(Boolean).join(" ")||j.title||"a job"):"a job"};
+      if(today&&run) return {k:0,run,j,label:isClean(run)?"Cleaning the shop":j?([j.year,j.make,j.model].filter(Boolean).join(" ")||j.title||"a job"):"a job"};
       if(today&&openPunch(u.id)) return {k:1}; return {k:2}; };
     const dur=ms=>{ const m=Math.max(0,Math.round(ms/60000)); return m<60?m+" min":Math.floor(m/60)+"h "+String(m%60).padStart(2,"0")+"m"; };
     const people = db.users.filter(u=>worksOnCars(u) || jobs.some(j=>onCrew(j,u.id))).map(u=>({u,s:stat(u)}))
@@ -2748,7 +2769,7 @@
       return `<button type="button" class="cb-card big ${j.on_hold?"hold":""}" data-tj="${j.id}"><div class="row" style="gap:6px"><span class="mono" style="font-size:12px">${esc(bNum(j))}</span>${j.priority==="rush"?'<span class="pill red">Rush</span>':""}${r?'<span class="pill green">Timer running</span>':""}<span class="spacer"></span><span class="pill">${esc(B_ST[j.stage])}</span></div>
         <b style="font-size:16px">${esc(bCar(j))}</b><div class="muted" style="font-size:13px">${esc(j.color||"")}${j.paint_code?` \u00b7 paint ${esc(j.paint_code)}`:""}</div>
         ${pi.n?`<div class="muted" style="font-size:12.5px;margin-top:4px">Parts in: ${pi.inn} of ${pi.n}${pi.back?" \u00b7 back-ordered":""}</div>`:""}${j.on_hold?`<div class="pill red" style="margin-top:6px">On hold${j.hold_reason?": "+esc(j.hold_reason):""}</div>`:""}</button>`; };
-    $("#view").innerHTML=`<div class="card"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">My body jobs</h2><span class="spacer"></span><button class="btn ghost sm" type="button" id="tbRef">Refresh</button></div>
+    $("#view").innerHTML=`${cleanCardHTML()}<div class="card"><div class="row" style="margin-bottom:10px"><h2 style="margin:0">My body jobs</h2><span class="spacer"></span><button class="btn ghost sm" type="button" id="tbRef">Refresh</button></div>
       <h3 style="margin:6px 0 8px">Your turn now <span class="muted" style="font-weight:400">${now.length}</span></h3>${now.length?`<div class="cb-list">${now.map(card).join("")}</div>`:'<div class="empty">Nothing waiting on you right now.</div>'}
       ${later.length?`<h3 style="margin:18px 0 8px">Coming up</h3><div class="cb-list">${later.map(card).join("")}</div>`:""}</div>`;
     $("#tbRef").onclick=()=>{ bdb.jobs=null; viewBodyJobs(); };
@@ -2939,7 +2960,7 @@
     const wsMs=ws.getTime(), weMs=wsMs+7*86400000;
     const worked=[]; // per job+tech this week
     for(const s of db.jobTime){ const a=Math.max(s.start,wsMs), b=Math.min(s.end||Date.now(),weMs); if(b<=a) continue;
-      const k=s.jobId+"|"+s.userId; let w=worked.find(x=>x.k===k); if(!w){ w={k,job:db.jobs.find(j=>j.id===s.jobId),userId:s.userId,ms:0,run:false}; worked.push(w); }
+      const k=s.jobId+"|"+s.userId; let w=worked.find(x=>x.k===k); if(!w){ w={k,job:s.jobId===CLEAN_ID?CLEAN_JOB:db.jobs.find(j=>j.id===s.jobId),userId:s.userId,ms:0,run:false}; worked.push(w); }
       w.ms+=b-a; if(!s.end) w.run=true; }
     worked.sort((a,b)=>b.ms-a.ms);
     const label = ws.toLocaleDateString([], {month:"short",day:"numeric"})+" \u2013 "+days[6].toLocaleDateString([], {month:"short",day:"numeric",year:"numeric"});
@@ -3275,12 +3296,22 @@
       return {u,mine,clocked,onjobs,billed,paid,cars:mine.length,labor:r2(mine.reduce((s,j)=>s+tot(j).labor/crewIds(j).length,0)),parts:r2(mine.reduce((s,j)=>s+tot(j).parts/crewIds(j).length,0)),ot:Math.max(0,clocked-40*3600000),pay:fin?payFor(u.id,R.a,R.b).total:0};
     });
     const h=ms=>(ms/3600000).toFixed(1);
+    const cleaners=db.allUsers.filter(u=>db.jobTime.some(s=>s.jobId===CLEAN_ID&&s.userId===u.id));
+    const cleanRows=cleaners.map(u=>{ const ss=db.jobTime.filter(s=>s.jobId===CLEAN_ID&&s.userId===u.id&&inR(s.start)); return {u,n:ss.length,ms:cleanMs(u.id,R.a,R.b)}; }).filter(x=>x.ms>0||x.n);
+    const cleanTot=cleanRows.reduce((a,x)=>a+x.ms,0);
+    const cwks=[...Array(8)].map((_,i)=>{ const d=payWeekStart(); d.setDate(d.getDate()-7*(7-i)); return d.getTime(); });
+    const cleanCard=card("Shop cleaning", tbl([["Technician"],["Times cleaned","num"],["Hours","num"],["Avg per clean","num"],["Share","num"]],
+        cleanRows.sort((a,b)=>b.ms-a.ms).map(x=>trow([esc(x.u.name),[x.n],[h(x.ms)],[x.n?fmtDur(x.ms/x.n):"\u2013"],[pct(x.ms,cleanTot)]])),
+        trow(["<b>Total</b>",[cleanRows.reduce((a,x)=>a+x.n,0)],[`<b>${h(cleanTot)}</b>`],"",""])), "Time each technician spent on the Shop cleaning timer in this period. Cleaning isn't counted as time on jobs.")
+      +card("Shop cleaning by week", tbl([["Pay week (Fri\u2013Thu)"]].concat(cleaners.map(u=>[esc(u.name),"num"])).concat([["Total hrs","num"]]),
+        cwks.slice().reverse().map(a=>{ const bd=new Date(a); bd.setDate(bd.getDate()+7); const b=bd.getTime(); return trow([new Date(a).toLocaleDateString([],{month:"short",day:"numeric"})+" \u2013 "+new Date(b-1).toLocaleDateString([],{month:"short",day:"numeric"})].concat(cleaners.map(u=>{ const m=cleanMs(u.id,a,b); return [m?h(m):"\u2013"]; })).concat([[`<b>${h(cleanMs(null,a,b))}</b>`]])); })),
+        "Last 8 pay weeks, newest first.");
     S.techs=card("Technician productivity &amp; efficiency", tbl([["Technician"],["Clocked hrs","num"],["On jobs hrs","num"],["Billed hrs","num"],["Tech hrs","num"],["Productivity","num"],["Efficiency","num"],["Over 40 hrs","num"]],
         techs.map(t=>trowT([esc(t.u.name),[h(t.clocked)],[h(t.onjobs)],[t.billed.toFixed(1)],[t.paid.toFixed(1)],[pct(t.onjobs,t.clocked)],[t.onjobs?Math.round(t.billed/(t.onjobs/3600000)*100)+"%":"\u2013"],[h(t.ot)]],t.mine))),
         "Productivity = time on jobs \u00f7 time clocked. Efficiency = hours billed \u00f7 time on jobs (over 100% means beating book time). Shared jobs are split evenly.")
       +(fin?card("Sales by technician", tbl([["Technician"],["Cars","num"],["Billed hrs","num"],["Labor sold","num"],["Parts sold","num"],["Team pay","num"],["Labor profit","num"],["Labor $ per clocked hr","num"]],
         techs.filter(t=>t.cars||t.clocked||t.pay).map(t=>trowT([esc(t.u.name),[t.cars],[t.billed.toFixed(1)],[money(t.labor)],[money(t.parts)],[money(t.pay)],[money(r2(t.labor-t.pay))],[t.clocked?money(r2(t.labor/(t.clocked/3600000))):"\u2013"]],t.mine))))
-        :card("Work by technician", tbl([["Technician"],["Cars","num"],["Billed hrs","num"]], techs.filter(t=>t.cars).map(t=>trowT([esc(t.u.name),[t.cars],[t.billed.toFixed(1)]],t.mine)))));
+        :card("Work by technician", tbl([["Technician"],["Cars","num"],["Billed hrs","num"]], techs.filter(t=>t.cars).map(t=>trowT([esc(t.u.name),[t.cars],[t.billed.toFixed(1)]],t.mine)))))+cleanCard;
 
     // ---- Customers ----
     const cs={}; done.forEach(j=>{ if(!j.customerId) return; const x=cs[j.customerId]=cs[j.customerId]||{n:0,total:0,l:[]}; x.n++; x.l.push(j); x.total+=tot(j).total; });
