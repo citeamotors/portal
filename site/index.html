@@ -1799,8 +1799,8 @@
     $("#whoInit").textContent=(me.name||"?").slice(0,1).toUpperCase();
     const mgr = me.role==="manager";
     const groups = (mgr
-      ? [["Shop",["wip","calendar","board","customers","inventory","reports"]],["Collision",["collision"]],["Website",["forsale","leads"]],["Team",["timesheets","clock","training","team",...(me.finance?["earnings","logins"]:[])]]]
-      : [["My day",[shopWork(me)==="body"?"bodyjobs":"jobs","clock","training"]]]).map(([g,keys])=>[g,keys.filter(k=>k==="timesheets"||k==="earnings"||k==="logins"||canPage(k))]).filter(([g,keys])=>keys.length);
+      ? [["Shop",["wip","calendar","board","customers","inventory","reports"]],["Collision",["collision"]],["Website",["forsale","leads"]],["Team",["team",...(me.dbRole==="owner"?[]:["clock"]),"training",...(me.finance?["logins"]:[])]]]
+      : [["My day",[shopWork(me)==="body"?"bodyjobs":"jobs","clock","training"]]]).map(([g,keys])=>[g,keys.filter(k=>k==="team"&&mgr||k==="logins"||canPage(k))]).filter(([g,keys])=>keys.length);
     $("#tabs").innerHTML = groups.map(([g,keys])=>`<div class="sect">${g}</div>`+keys.map(k=>
       `<button data-tab="${k}"><svg viewBox="0 0 24 24">${ICONS[k]}</svg><span>${TITLES[k]}</span>${k==="leads"?'<span class="count red hidden" id="leadCount"></span>':""}${k==="wip"?'<span class="count" id="wipCount"></span>':""}</button>`).join("")).join("");
     $("#tabs").onclick = e=>{ const b=e.target.closest("button"); if(b){ if(b.dataset.tab==="team") viewTeam.open=null; show(b.dataset.tab); $("#app").classList.remove("nav-open"); } };
@@ -1812,6 +1812,7 @@
     askLocationEarly();
     $("#topNew").onclick = ()=>openWO(null);
     $("#clockPill").onclick = ()=>show("clock");
+    $("#clockPill").classList.toggle("hidden", me.dbRole==="owner");
     $("#bellBtn").onclick = openNotices; updateBell();
     $("#searchBtn").classList.toggle("hidden", false);
     $("#searchBtn").onclick = ()=>{ const tb=document.querySelector(".topbar"); tb.classList.toggle("search-open"); if(tb.classList.contains("search-open")) $("#gq").focus(); };
@@ -1839,13 +1840,15 @@
   function show(t){
     openWO.from=null;
     if(t==="jobs"&&me&&me.role!=="manager"&&shopWork(me)==="body") t="bodyjobs";
-    if(me&&t==="earnings"&&!isFin()) t="clock";
+    if(me&&t==="earnings"&&!isFin()) t=me.role==="manager"?"timesheets":"clock";
+    if(me&&t==="clock"&&me.dbRole==="owner") t="team";
+    if(me&&t==="team"&&!canPage("team")&&me.role==="manager") t="timesheets";
     if(me&&t!=="settings"&&t!=="timesheets"&&t!=="earnings"&&!canPage(t)){ const f=document.querySelector("#tabs button[data-tab]"); if(f&&f.dataset.tab!==t) t=f.dataset.tab; }
     if(t==="jobs") viewJobs.open=null;
     if(tab==="jobs") wsOpenId=null;
     if(woCtl&&woCtl.flush){ try{ woCtl.flush(); }catch(e){} }
     tab=t; clearInterval(tick); woCtl=null; document.body.classList.remove("wo-open");
-    document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.tab===t));
+    document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.tab===t||(b.dataset.tab==="team"&&(t==="timesheets"||t==="earnings"))));
     $("#pageTitle").textContent = (innerWidth<=480&&SHORT_TITLES[t])||TITLES[t]||"";
     document.querySelector(".topbar").classList.remove("search-open");
     ({clock:viewClock,jobs:viewJobs,training:viewTraining,logins:viewLogins,collision:viewCollision,bodyjobs:viewBodyJobs,forsale:viewForSale,leads:viewLeads,board:viewBoard,timesheets:viewTimesheets,team:viewTeam,earnings:viewEarnings,wip:viewWip,customers:viewCustomers,inventory:viewInventory,reports:viewReports,calendar:viewCalendar,settings:viewSettings})[t]();
@@ -1967,7 +1970,7 @@
     const weeks=[...Array(8)].map((_,i)=>{ const d=new Date(ws); d.setDate(d.getDate()-7*(7-i)); return d; });
     const hist=db.allUsers.filter(u=>payOf(u.id)).map(u=>({u,w:weeks.map(d=>payFor(u.id,d.getTime(),d.getTime()+7*86400000).total)}));
     const wk=d=>d.toLocaleDateString([],{month:"numeric",day:"numeric"});
-    $("#view").innerHTML=`<div class="card">
+    $("#view").innerHTML=teamStrip("earnings")+`<div class="card">
       <div class="row" style="margin-bottom:12px;flex-wrap:wrap;gap:8px"><h2 style="margin:0">Weekly earnings</h2><span class="spacer"></span>
         <button class="btn ghost sm" id="eaPrev" type="button">\u2039</button><b>${cur?"This week \u00b7 ":""}${label}</b><button class="btn ghost sm" id="eaNext" type="button" ${cur?"disabled":""}>\u203a</button>
         <button class="btn sm" id="eaCsv" type="button">Copy</button></div>
@@ -2919,7 +2922,7 @@
   function viewTimesheets(){
     const ws = viewTimesheets.ws || payWeekStart();
     const days=[...Array(7)].map((_,i)=>{ const d=new Date(ws); d.setDate(d.getDate()+i); return d; });
-    const techs=db.users;
+    const techs=db.users.filter(u=>u.dbRole!=="owner"||days.some(d=>msInRange(u.id,d.getTime(),d.getTime()+86400000)>0));
     const rows=techs.map(u=>{
       const per=days.map(d=>{ const a=d.getTime(), b=a+86400000; return msInRange(u.id,a,b); });
       const total=per.reduce((s,x)=>s+x,0);
@@ -2937,7 +2940,7 @@
     const csv = ["Team member,"+days.map(d=>d.toLocaleDateString("en-CA")).join(",")+",Total clocked hours,Over 40,Hours on jobs,% on jobs,Pay type,Hourly pay,Flag hours,Flag pay,Total pay",
       ...rows.map(r=>{ const P0=payFor(r.u.id,ws.getTime(),ws.getTime()+7*86400000), P=isFin()?P0:{...P0,set:false}; return [r.u.name,...r.per.map(hrs),hrs(r.total),hrs(r.ot),hrs(r.btotal),r.total?Math.round(r.btotal/r.total*100)+"%":"",P.set?payTypeLabel(P.type):"",P.set?P.hourly.toFixed(2):"",P.set?P.flagHrs.toFixed(2):"",P.set?P.flag.toFixed(2):"",P.set?P.total.toFixed(2):""].join(","); })].join("\n");
     const punches=db.punches.filter(p=>p.in>=ws.getTime() && p.in<ws.getTime()+7*86400000).sort((a,b)=>b.in-a.in);
-    $("#view").innerHTML = `<div class="card">
+    $("#view").innerHTML = teamStrip("timesheets")+`<div class="card">
       <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Timesheets</h2><span class="spacer"></span>
         <button class="btn ghost sm" id="wPrev">\u2039</button><b>${label}</b><button class="btn ghost sm" id="wNext">\u203a</button>
         <button class="btn sm" id="copyCsv">Copy for payroll</button></div>
@@ -4312,13 +4315,20 @@
     bar.querySelectorAll("[data-adis]").forEach(b=>b.onclick=()=>{ const a=items[+b.dataset.adis];
       if(a.est) markSeen(); else dismissKeys(a.keys||[a.k]); b.closest(".alert").remove(); bar.classList.toggle("hidden",!bar.querySelector(".alert")); updateBell(); });
   }
+  // Team / Timesheets / Earnings live together under Team
+  function teamStrip(cur){
+    if(me.role!=="manager") return "";
+    const ks=[["team","Team members"],["timesheets","Timesheets"],["earnings","Earnings"]].filter(([k])=>k==="timesheets"||(k==="team"&&canPage("team"))||(k==="earnings"&&isFin()));
+    return `<div class="board-tools rep-cats no-print team-strip" style="margin-bottom:12px">${ks.map(([k,l])=>`<button type="button" class="chip ${cur===k?"on":""}" data-tstrip="${k}">${l}</button>`).join("")}</div>`;
+  }
+  document.addEventListener("click",e=>{ const b=e.target.closest&&e.target.closest("[data-tstrip]"); if(!b) return; if(b.dataset.tstrip==="team") viewTeam.open=null; show(b.dataset.tstrip); window.scrollTo(0,0); });
   function viewTeam(){
     if(viewTeam.open&&isFin()){ const u=db.allUsers.find(x=>x.id===viewTeam.open); if(u) return viewMember(u); viewTeam.open=null; }
     if(isFin()&&!viewTeam.loaded){ viewTeam.loaded=true; loadTeamInfo().then(()=>{ if(tab==="team"&&!viewTeam.open) viewTeam(); }); }
     const info=id=>((db.teamInfo||{})[id]||{}).data||{};
     const payTxt=u=>{ const p=payOf(u.id); if(!p) return '<span class="muted">Not set</span>'; return esc(payTypeLabel(p.pay_type))+(p.pay_type!=="flag"?` \u00b7 <span class="mono">${money(Number(p.hourly_rate||0))}/hr</span>`:"")+(p.pay_type!=="hourly"?` \u00b7 <span class="mono">${money(Number(p.flag_rate||0))}/flag hr</span>`:""); };
     const docsN=id=>(info(id).docs||[]).length;
-    $("#view").innerHTML = `<div class="card">
+    $("#view").innerHTML = teamStrip("team")+`<div class="card">
       <div class="row" style="margin-bottom:12px"><h2 style="margin:0">Team</h2><span class="spacer"></span>${isFin()?'<button class="btn sm" id="addUser">+ Add team member</button>':""}</div>
       ${isFin()?'<div class="hint" style="margin:-4px 0 10px">Tap a team member to open their file: pay, contact info, emergency contacts, ID and signed paperwork. Clock people in or out on Timesheets.</div>':""}
       <div class="tablewrap"><table class="team-tbl"><thead><tr><th>Name</th><th>Role</th><th>Phone</th>${isFin()?"<th>Pay</th><th>Started</th><th class=\"num\">Files</th>":""}<th>Status</th><th></th></tr></thead><tbody>
