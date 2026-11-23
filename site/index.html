@@ -1317,7 +1317,17 @@
         const old=snap[p.key]||new Map(), seen=new Set(), up=[];
         for(const r of p.rows){ const id=p.pk(r), j=JSON.stringify(r); seen.add(id); if(old.get(id)!==j) up.push(r); }
         if(up.length && p.t==="work_orders" && me.role!=="manager"){
-          for(const r of up){ const {data,error}=await sb.rpc("tech_set_status",{p_id:r.id,p_status:r.status}); if(error||data&&data.error) failures.push(error?error.message:"Only your manager can change that ("+data.error+")"); else old.set(r.id,JSON.stringify(r)); }
+          // technicians can only change a work order's status. Anything else that differs is a stale copy: reload that
+          // work order from the server instead of retrying forever (a stuck row used to fail every save after it)
+          const reload=async id=>{ try{ const {data:row,error:re}=await sb.from("work_orders").select("*").eq("id",id).maybeSingle(); if(re) throw re; const i=db.jobs.findIndex(x=>x.id===id);
+            if(!row){ if(i>=0) db.jobs.splice(i,1); old.delete(id); return; } const o=fromRow("jobs",row); if(i>=0){ const cur=db.jobs[i]; Object.keys(cur).forEach(x=>{ if(!(x in o)) delete cur[x]; }); Object.assign(cur,o); } else db.jobs.push(o);
+            old.set(id,JSON.stringify(toRow("jobs",o))); scheduleRender(); }catch(e){ old.set(id,JSON.stringify(rowsOf("jobs").find(x=>x.id===id)||{})); } };
+          for(const r of up){ let prev=null; try{ prev=JSON.parse(old.get(r.id)||"null"); }catch(e){}
+            if(prev&&prev.status===r.status){ await reload(r.id); continue; }
+            const {data,error}=await sb.rpc("tech_set_status",{p_id:r.id,p_status:r.status});
+            if(error||data&&data.error){ const why=error?error.message:data.error; logAct("action","Error: status "+r.status+" on #"+(r.number||r.id)+" refused ("+why+")"); await reload(r.id);
+              if(!error&&data.error!=="not_found") toast(data.error==="locked_status"?"That job's status was changed by the office \u2014 refreshed.":"Only your manager can change that ("+why+")"); else if(error) failures.push(why); }
+            else old.set(r.id,JSON.stringify(r)); }
         } else if(up.length){
           // rows already on the server: send only the columns this device changed, so a stale copy of the other
           // columns (changed meanwhile on another device) never overwrites them
@@ -1659,7 +1669,7 @@
     if(isWO(j) && (j.status==="approved"||(j.status==="estimate"&&validApproval(j)))) setStatus(j,"in_progress");
     save(); return true;
   }
-  function toast(msg){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2200); }
+  function toast(msg){ if(/couldn.t|not saved|error|failed/i.test(String(msg))) try{ logAct("action","Error: "+msg); }catch(e){} const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2200); }
 
   function weekStart(d=new Date()){ const x=new Date(d); x.setHours(0,0,0,0); const day=(x.getDay()+6)%7; x.setDate(x.getDate()-day); return x; } // Monday
   // pay weeks run Friday through Thursday (timesheets, earnings, pay)
@@ -2813,6 +2823,8 @@
 
   /* ---------- login and activity log (owners only can read it) ---------- */
   let actSession=null, actLast={k:"",t:0};
+  window.addEventListener("error",e=>{ try{ logAct("action","JS error: "+(e.message||"")+" @"+(e.lineno||"")); }catch(_){} });
+  window.addEventListener("unhandledrejection",e=>{ try{ const r=e.reason; logAct("action","JS error: "+((r&&r.message)||String(r))); }catch(_){} });
   function logAct(kind,detail){
     if(!me) return; try{
       if(kind==="page"&&actLast.k===detail&&Date.now()-actLast.t<60000) return; if(kind==="page") actLast={k:detail,t:Date.now()};
