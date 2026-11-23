@@ -438,6 +438,10 @@
   .tj-go{font-size:28px;color:var(--steel);flex:0 0 auto}
   .tjd-bar{position:sticky;top:var(--top);z-index:4;margin:-4px -2px 12px;padding:8px 2px;background:var(--paper)}
   .tjd-row{display:flex;align-items:center;gap:10px}
+  .tjd-tabs.t3{grid-template-columns:1fr 1fr 1fr}
+  .stage-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:14px;border-left:4px solid #D9A400}
+  .stage-bar.on{border-left-color:#16A34A}.stage-bar.done{border-left-color:#2E7D32}
+  .stage-bar .stage-t{flex:1;min-width:0;display:flex;flex-direction:column}.stage-bar .stage-t span{font-size:13px;color:var(--steel,#686868)}
   .tjd-tabs{display:grid;grid-template-columns:1fr 1fr;margin-top:8px;border:1px solid var(--hairline);background:var(--surface)}
   .tjd-tabs button{font:inherit;font-size:12.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:12px 6px;border:0;background:transparent;color:var(--steel);cursor:pointer}
   .tjd-tabs button+button{border-left:1px solid var(--hairline)}
@@ -2216,6 +2220,16 @@
     const isRun=g=>!!(mine&&mine.jobId===j.id&&mine.lineKey===g.key);
     const allDone=groups.length&&groups.every(gDone);
     const missing=wo?wsMissing(j,d):[];
+    // three stages: pre-repair (drive check + general inspection), repair, post-repair (test drive + out odometer)
+    const isDriveG=g=>/test drive|drive test/i.test(g), gKeys=f=>wo?wsGroupsFor(j).filter(([g])=>f(isDriveG(g))).flatMap(x=>x[1]).map(x=>x[0]):[];
+    const preKeys=gKeys(x=>!x), postKeys=gKeys(x=>x), rated=k=>!!(d.items[k]&&d.items[k].r);
+    const preN=preKeys.filter(rated).length+preCount(d), preT=preKeys.length+PRE_ITEMS.length, preOK=preN>=preT;
+    const odoOK=!!String(d.odo||"").replace(/\D/g,""), postN=postKeys.filter(rated).length+(odoOK?1:0), postT=postKeys.length+1, postOK=postN>=postT;
+    const runK=k=>{ const r=runningTask(me.id); return !!(r&&r.jobId===j.id&&r.lineKey===k); };
+    if(wo&&((runK("__pre")&&preOK)||(runK("__post")&&postOK))){ const st=stopTask(me.id); save(); toast((st.lineKey==="__pre"?"Pre-repair":"Post-repair")+" done \u2014 "+fmtDur(keyMs(st.lineKey))+" total"); }
+    const stageBar=(k,label,done)=>{ const ms=keyMs(k), run=runK(k), act=can&&!j.done&&j.status!=="picked_up";
+      return `<div class="card stage-bar${run?" on":""}${done?" done":""}"><div class="stage-t"><b>${label}</b><span>${run?"Timer running \u00b7 ":""}${ms||run?fmtDur(ms)+(done?" total":" so far"):done?"Complete":"Timer not started"}</span></div>`
+        +(act?(run?`<button class="btn sm pause" data-stg-stop="${k}" type="button">\u23f8 Pause</button>`:!done?`<button class="btn sm start" data-stg-go="${k}" type="button">\u25b6 ${ms?"Resume":"Start"}</button>`:""):"")+`</div>`; };
     const facts=[["Mileage",odoFmt(j.mileage)],["Engine",j.engine||v.engine||""],["Concern",j.title||""]].filter(x=>x[1]);
     const pct=wo?wsProgress(j,d):0;
     const photos=d.photos||[];
@@ -2223,18 +2237,24 @@
     // the job being worked on goes first; the rest keep their order (numbers stay the same)
     const order=groups.map((g,i)=>[g,i]).sort((x,y)=>(isRun(y[0])-isRun(x[0]))||(gDone(x[0])-gDone(y[0]))||(x[1]-y[1]));
     const jobBtns=(g,i)=>{ if(!can||j.status==="picked_up") return "";
-      if(!preDone(d)&&!gDone(g)) return `<button class="btn sm" data-tjt="insp" type="button">Do the pre-repair inspection first \u203a</button>`;
+      if(!preDone(d)&&!gDone(g)) return `<button class="btn sm" data-tjt="pre" type="button">Do the pre-repair inspection first \u203a</button>`;
       if(!jobOk(g)) return `<div class="hint">${okKeys&&okKeys.size?"New repair \u2014 waiting on the customer to approve it.":"Waiting on the customer to approve the estimate. You can start once it's approved."}</div>`;
       const done=gDone(g), run=isRun(g), tm=keyMs(g.key);
       if(done) return `<button class="btn ghost sm" data-gundo="${g.key}" type="button">Undo complete</button>`;
       return `${run?`<button class="btn sm pause" data-gpause="${g.key}" type="button">\u23f8 Pause</button>`:`<button class="btn sm start" data-gstart="${g.key}" type="button">\u25b6 ${tm?"Resume":"Start"} job ${i+1}</button>`}
         <button class="btn sm complete" data-gdone="${g.key}" type="button">\u2713 Mark job ${i+1} complete</button>`; };
-    const tabT=wo?((viewJobDetail.tabFor===j.id&&viewJobDetail.tab)||(preDone(d)||j.done?"rep":"insp")):"rep", WI=wsItemsFor(j), inspN=WI.filter(([k])=>d.items[k]&&d.items[k].r).length+preCount(d), inspT=WI.length+PRE_ITEMS.length;
+    const tabT0=wo?((viewJobDetail.tabFor===j.id&&viewJobDetail.tab)||(j.done?"rep":!preDone(d)?"pre":allDone?"post":"rep")):"rep", tabT=tabT0==="insp"?"pre":tabT0, WI=wsItemsFor(j), inspN=WI.filter(([k])=>d.items[k]&&d.items[k].r).length+preCount(d), inspT=WI.length+PRE_ITEMS.length;
+    if(wo){ viewJobDetail.tab=tabT; viewJobDetail.tabFor=j.id; } // stay on this tab while working through it;
     $("#view").innerHTML = `${clockBarHTML()}
       <div class="tjd-bar"><div class="tjd-row"><button class="btn ghost sm" id="tjBack" type="button">\u2039 My jobs</button><span class="tjd-bar-t">${esc(vehOf(j)||j.title||"")}</span>${wo?`<span class="pill ${pct>=100?"green":"prog"}" id="wsPctPill">${pct}% done</span>`:""}</div>
-        ${wo?`<div class="tjd-tabs"><button type="button" data-tjt="insp" class="${tabT==="insp"?"on":""}">Inspection &amp; test drive <small class="${inspN>=inspT?"ok":"need"}">${inspN}/${inspT}</small></button><button type="button" data-tjt="rep" class="${tabT==="rep"?"on":""}">Repairs <small class="${allDone?"ok":"need"}">${groups.filter(gDone).length}/${groups.length}</small></button></div>`:""}</div>
+        ${wo?`<div class="tjd-tabs t3"><button type="button" data-tjt="pre" class="${tabT==="pre"?"on":""}">Pre-repair <small class="${preOK?"ok":"need"}">${preN}/${preT}</small></button><button type="button" data-tjt="rep" class="${tabT==="rep"?"on":""}">Repair <small class="${allDone?"ok":"need"}">${groups.filter(gDone).length}/${groups.length}</small></button><button type="button" data-tjt="post" class="${tabT==="post"?"on":""}">Post-repair <small class="${postOK?"ok":"need"}">${postN}/${postT}</small></button></div>`:""}</div>
       <div class="ws tjd-wrap">
-      ${tabT==="insp"?preHTML(d,dis)+wsInspHTML(d,dis,j)+`<div class="tjd-next"><button class="btn ghost" data-tjt="rep" type="button">Go to repairs \u203a</button></div>`:`
+      ${tabT==="pre"?stageBar("__pre","Pre-repair inspection",preOK)+preHTML(d,dis)+wsInspHTML(d,dis,j,"pre")+`<div class="tjd-next"><button class="btn ghost" data-tjt="rep" type="button">Go to repair \u203a</button></div>`
+      :tabT==="post"?stageBar("__post","Post-repair test drive",postOK)+wsInspHTML(d,dis,j,"post")+`
+      <div class="card"><div class="two"><div><label style="margin-top:0">Out odometer <span class="muted" style="text-transform:none;letter-spacing:0">(required)</span></label>${odoBox(`id="wsOdo" class="mono ${odoOK?"fld-ok":"fld-need"}" placeholder="Mileage when done" ${dis}`,d.odo||(isKm(j.mileage)?" km":""))}</div><div></div></div>
+        <label>Tech notes</label><textarea id="wsNotes" rows="4" placeholder="Anything the office should know" ${dis}>${esc(d.notes||"")}</textarea>
+        <div class="muted" style="font-size:12px;margin-top:6px" id="wsStamp">Saves automatically.</div>
+        ${can&&!j.done?(!allDone?`<div class="tjd-left">Finish every repair on the Repair tab before closing out the car.</div>`:missing.length?`<div class="tjd-left">Still needed before the car is finished: <b>${esc(missing.join(", "))}</b>.${!preOK?` <button class="btn ghost sm" data-tjt="pre" type="button" style="margin-top:8px">Open pre-repair</button>`:""}</div>`:`<button class="btn finish tjd-carfin" id="tjFinish" type="button">\u2713 Car is finished</button>`):""}</div>`:`
       <div class="card tjd">
         <div class="tjd-veh">${esc(vehOf(j)||j.title||"Shop task")}</div>
         <div class="tj-st" style="margin:6px 0 0">${j.done?'<span class="pill green">Done</span>':wo?techStatusPill(j):""}${j.priority==="high"?'<span class="pill red">Urgent</span>':""}</div>
@@ -2265,11 +2285,9 @@
         </div>`; }).join("")+`<div class="labor-total tjob-tot"><span>${me.role==="manager"?"Tech hours":"Your hours"}</span><span>${techHrs(j).toFixed(2)} hrs</span></div>`
         :`<div class="muted">${esc(j.title||"No repair lines yet.")}</div>`}
         ${j.notes?`<div class="job-notes" style="margin-top:10px">${esc(j.notes)}</div>`:""}
-        ${can&&!j.done&&allDone?(missing.length?`<div class="tjd-left">All jobs complete. Still needed before the car is finished: <b>${esc(missing.join(", "))}</b>.${missing.some(m=>/inspection/.test(m))?` <button class="btn ghost sm" data-tjt="insp" type="button" style="margin-top:8px">Open inspection</button>`:""}</div>`:`<button class="btn finish tjd-carfin" id="tjFinish" type="button">\u2713 Car is finished</button>`):""}
+        ${can&&!j.done&&allDone?`<div class="tjd-next" style="margin-top:12px"><button class="btn" data-tjt="post" type="button">All repairs done \u2014 go to post-repair \u203a</button></div>`:""}
       </div>
-      <div class="card"><div class="two"><div><label style="margin-top:0">Out odometer <span class="muted" style="text-transform:none;letter-spacing:0">(required)</span></label>${odoBox(`id="wsOdo" class="mono ${String(d.odo||"").replace(/\D/g,"")?"fld-ok":"fld-need"}" placeholder="Mileage when done" ${dis}`,d.odo||(isKm(j.mileage)?" km":""))}</div><div></div></div>
-        <label>Tech notes</label><textarea id="wsNotes" rows="4" placeholder="Anything the office should know" ${dis}>${esc(d.notes||"")}</textarea>
-        <div class="muted" style="font-size:12px;margin-top:6px" id="wsStamp">Saves automatically.</div></div>`:""}`}
+      `:""}`}
       </div>`;
     bindClockBar(viewJobs); bindJobs(viewJobs); if(wo) wsBind(j);
     const back=()=>{ viewJobs.open=null; wsOpenId=null; viewJobs(); window.scrollTo(0,0); };
@@ -2292,6 +2310,8 @@
       const miss=wsMissing(j,d); if(!miss.length) return finishCar();
       if(miss.length===1&&/odometer/.test(miss[0])) return askOdo(()=>afterDone());
       toast("All jobs complete. Still needed: "+miss.join(", ")); keep(); };
+    $("#view").querySelectorAll("[data-stg-go]").forEach(b=>b.onclick=async()=>{ b.disabled=true; const k=b.dataset.stgGo; if(await startJob(j,k,k==="__pre"?"pre-repair inspection":"post-repair test drive")) viewJobDetail(j); else b.disabled=false; });
+    $("#view").querySelectorAll("[data-stg-stop]").forEach(b=>b.onclick=()=>{ const r=runningTask(me.id); if(r&&r.jobId===j.id){ stopTask(me.id); save(); toast("Paused \u2014 "+fmtDur(keyMs(b.dataset.stgStop))+" so far"); } viewJobDetail(j); });
     $("#view").querySelectorAll("[data-tjt]").forEach(b=>b.onclick=()=>{ viewJobDetail.tab=b.dataset.tjt; viewJobDetail.tabFor=j.id; viewJobDetail(j); window.scrollTo(0,0); });
     $("#view").querySelectorAll("[data-wsl]").forEach(c=>c.onchange=()=>{ d.labor[c.dataset.wsl]=c.checked; const g=groups.find(x=>linesOf(x).some(l=>l[4]===c.dataset.wsl)); if(c.checked&&g&&gDone(g)) stopLine(g.key); wsSave(true); if(c.checked) afterDone(); else keep(); });
     $("#view").querySelectorAll("[data-pok]").forEach(b=>b.onclick=()=>{ d.pok[b.dataset.pok]=!d.pok[b.dataset.pok]; wsSave(); keep(); });
@@ -3312,6 +3332,11 @@
     const cleanRows=cleaners.map(u=>{ const ss=db.jobTime.filter(s=>s.jobId===CLEAN_ID&&s.userId===u.id&&inR(s.start)); return {u,n:ss.length,ms:cleanMs(u.id,R.a,R.b)}; }).filter(x=>x.ms>0||x.n);
     const cleanTot=cleanRows.reduce((a,x)=>a+x.ms,0);
     const cwks=[...Array(8)].map((_,i)=>{ const d=payWeekStart(); d.setDate(d.getDate()-7*(7-i)); return d.getTime(); });
+    const stg=(u,k)=>{ const ss=db.jobTime.filter(s=>s.userId===u.id&&s.lineKey===k&&inR(s.start)); return {cars:new Set(ss.map(s=>s.jobId)).size, ms:ss.reduce((a,s)=>a+((s.end||Date.now())-s.start),0)}; };
+    const stgRows=db.allUsers.map(u=>({u,pre:stg(u,"__pre"),post:stg(u,"__post")})).filter(x=>x.pre.cars||x.post.cars);
+    const avgS=x=>x.cars?fmtDur(x.ms/x.cars):"\u2013";
+    const stgCard=card("Pre-repair &amp; post-repair time", tbl([["Technician"],["Pre-repair cars","num"],["Avg pre-repair","num"],["Post-repair cars","num"],["Avg post-repair","num"],["Total hrs","num"]],
+      stgRows.map(x=>trow([esc(x.u.name),[x.pre.cars],[avgS(x.pre)],[x.post.cars],[avgS(x.post)],[h(x.pre.ms+x.post.ms)]]))), "From the Pre-repair and Post-repair timers on each car. Average is per car.");
     const cleanCard=card("Shop cleaning", tbl([["Technician"],["Times cleaned","num"],["Hours","num"],["Avg per clean","num"],["Share","num"]],
         cleanRows.sort((a,b)=>b.ms-a.ms).map(x=>trow([esc(x.u.name),[x.n],[h(x.ms)],[x.n?fmtDur(x.ms/x.n):"\u2013"],[pct(x.ms,cleanTot)]])),
         trow(["<b>Total</b>",[cleanRows.reduce((a,x)=>a+x.n,0)],[`<b>${h(cleanTot)}</b>`],"",""])), "Time each technician spent on the Shop cleaning timer in this period. Cleaning isn't counted as time on jobs.")
@@ -3323,7 +3348,7 @@
         "Productivity = time on jobs \u00f7 time clocked. Efficiency = hours billed \u00f7 time on jobs (over 100% means beating book time). Shared jobs are split evenly.")
       +(fin?card("Sales by technician", tbl([["Technician"],["Cars","num"],["Billed hrs","num"],["Labor sold","num"],["Parts sold","num"],["Team pay","num"],["Labor profit","num"],["Labor $ per clocked hr","num"]],
         techs.filter(t=>t.cars||t.clocked||t.pay).map(t=>trowT([esc(t.u.name),[t.cars],[t.billed.toFixed(1)],[money(t.labor)],[money(t.parts)],[money(t.pay)],[money(r2(t.labor-t.pay))],[t.clocked?money(r2(t.labor/(t.clocked/3600000))):"\u2013"]],t.mine))))
-        :card("Work by technician", tbl([["Technician"],["Cars","num"],["Billed hrs","num"]], techs.filter(t=>t.cars).map(t=>trowT([esc(t.u.name),[t.cars],[t.billed.toFixed(1)]],t.mine)))))+cleanCard;
+        :card("Work by technician", tbl([["Technician"],["Cars","num"],["Billed hrs","num"]], techs.filter(t=>t.cars).map(t=>trowT([esc(t.u.name),[t.cars],[t.billed.toFixed(1)]],t.mine)))))+stgCard+cleanCard;
 
     // ---- Customers ----
     const cs={}; done.forEach(j=>{ if(!j.customerId) return; const x=cs[j.customerId]=cs[j.customerId]||{n:0,total:0,l:[]}; x.n++; x.l.push(j); x.total+=tot(j).total; });
@@ -6028,9 +6053,10 @@
     const urls=links.map(l=>wsSignedUrls[l.dataset.wsimg]||l.getAttribute("href")||""); const at=links.indexOf(a);
     if(!urls[at]){ toast("Photo still loading \u2014 try again in a second"); return; }
     lightbox(urls.map((u,k)=>u||null).filter(Boolean), urls.slice(0,at).filter(Boolean).length); },true);
-  function wsInspHTML(d,dis,j){ const it=d.items=d.items||{};
-    return `      <div class="card"><h2>General inspection</h2>
-        ${isEV(j)?'<div class="hint" style="margin:-4px 0 8px">Electric vehicle inspection</div>':""}${priorHTML(j)}${wsGroupsFor(j).map(([g,items])=>`<div class="ws-group">${esc(g)}</div>${items.map(([k,l])=>{ const x=it[k]||{}; return `<div class="ws-item ${x.r?"is-"+x.r:""} ${x.f||(k==="tpress"&&d.tp&&Object.values(d.tp).some(Boolean))?"has-f":""}">
+  function wsInspHTML(d,dis,j,part){ const it=d.items=d.items||{};
+    const gs=wsGroupsFor(j).filter(([g])=>!part||(part==="post")===/test drive|drive test/i.test(g));
+    return `      <div class="card"><h2>${part==="post"?"Post-repair test drive":"General inspection"}</h2>
+        ${isEV(j)?'<div class="hint" style="margin:-4px 0 8px">Electric vehicle inspection</div>':""}${part==="post"?"":priorHTML(j)}${gs.map(([g,items])=>`<div class="ws-group">${esc(g)}</div>${items.map(([k,l])=>{ const x=it[k]||{}; return `<div class="ws-item ${x.r?"is-"+x.r:""} ${x.f||(k==="tpress"&&d.tp&&Object.values(d.tp).some(Boolean))?"has-f":""}">
           <div class="ws-name">${esc(l)}</div>
           <div class="ws-rate">${[["ok","OK"],["watch","Watch"],["repair","Repair"],["na","N/A"]].map(([v,t])=>`<button type="button" class="r-${v} ${x.r===v?"on":""}" data-wsr="${k}" data-v="${v}" ${dis}>${t}</button>`).join("")}</div>
           <textarea class="ws-find" data-wsf="${k}" rows="1" placeholder="Findings" ${dis}>${esc(x.f||"")}</textarea>${k==="tpress"?tpHTML(d,dis):""}</div>`; }).join("")}`).join("")}
