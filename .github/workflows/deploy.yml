@@ -25,6 +25,8 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Build the demo portal (sample data only, runs in the visitor's browser)
+        run: python3 tools/demo/build_demo.py
       - name: Check portal files
         run: |
           for f in index.html approve.html; do

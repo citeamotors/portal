@@ -3810,7 +3810,7 @@
   }
   let qboSyncing=false;
   async function qboSync(woIds, quiet){
-    if(qboSyncing||me.role!=="manager") return; const open=Object.values(db.qboLinks||{}).filter(l=>Number(l.balance)>0.004);
+    if(qboSyncing||!me||me.role!=="manager") return; const open=Object.values(db.qboLinks||{}).filter(l=>Number(l.balance)>0.004);
     if(!woIds&&!open.length) return; qboSyncing=true;
     try{ const r=await qboCall("sync",woIds?{wo_ids:woIds}:{}); (r.added||[]).forEach(p=>{ db.payments=db.payments||[]; if(!db.payments.some(x=>x.id===p.id)) db.payments.push(p); toast(`QuickBooks payment received: ${money(p.amount)}`); }); if((r.added||[]).length) scheduleRender(); }
     catch(e){ if(!quiet) toast("QuickBooks: "+(e.message||e)); }
