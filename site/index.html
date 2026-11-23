@@ -3891,7 +3891,9 @@
       q("#pSave").onclick=async()=>{
         const e=q("#pErr"), a=amt(); if(!(a>0)){ e.textContent="Enter the amount."; return; }
         if(r2(a+disc())>bal+0.004&&!confirm(`That's more than the ${money(bal)} balance. Save it anyway?`)) return;
-        const b=q("#pSave"); b.disabled=true;
+        const dup=(db.payments||[]).find(p=>p.wo_id===j.id&&!p.voided_at&&Math.abs(Number(p.amount)-a)<0.005&&p.method===meth()&&Date.now()-new Date(p.created_at).getTime()<10*60000);
+        if(dup&&!confirm(`A ${money(a)} ${M_LABEL[meth()]||meth()} payment was already recorded on this ticket ${Math.max(1,Math.round((Date.now()-new Date(dup.created_at).getTime())/60000))} min ago. Record another one?`)) return;
+        const b=q("#pSave"); if(b.disabled) return; b.disabled=true;
         const row={wo_id:j.id,amount:a,fee:0,discount:disc(),method:meth(),kind:q("#pDep").checked?"deposit":"payment",note:q("#pNote").value.trim()||null,received_by:me.id};
         await flushPush();
         const {data,error}=await sb.from("payments").insert(row).select().single();
