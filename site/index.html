@@ -453,6 +453,10 @@
   .tjd-tabs.t3{grid-template-columns:1fr 1fr 1fr}
   .wait-pause{width:100%;margin:0 0 14px;border-color:#C8201F;color:#C8201F}
   .wait-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:14px;border-left:4px solid #C8201F}.wait-bar .stage-t{flex:1;display:flex;flex-direction:column}.wait-bar .stage-t span{font-size:13px;color:var(--steel,#686868)}
+  .nodrive{border:1px solid var(--hairline,#ddd);padding:12px;margin:10px 0}.nodrive>span{display:block;font-weight:700;font-size:14px;margin-bottom:8px}
+  .nd-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}.nd-btns button{padding:10px 8px;border:1.5px solid var(--ink);background:transparent;color:var(--ink);font:600 13px/1.2 Montserrat,sans-serif;cursor:pointer;border-radius:0}
+  .nd-btns button.on{background:var(--ink);color:var(--paper,#fff)}.nodrive.off .nd-btns button.on{background:#C8201F;border-color:#C8201F;color:#fff}
+  .nd-note{margin-top:8px;font-size:13px;font-weight:600;color:#C8201F}
   .stage-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:14px;border-left:4px solid #D9A400}
   .stage-bar.on{border-left-color:#16A34A}.stage-bar.done{border-left-color:#2E7D32}
   .stage-bar .stage-t{flex:1;min-width:0;display:flex;flex-direction:column}.stage-bar .stage-t span{font-size:13px;color:var(--steel,#686868)}
@@ -2284,7 +2288,7 @@
     const v=db.vehicles.find(x=>x.id===j.vehicleId); if(v){ if(keyUrl) v.keyPhoto=keyUrl; if(carUrl&&!v.photo) v.photo=carUrl; }
     return true;
   }
-  const wsMissing=(j,d)=>{ const it=d.items||{}, n=wsItemsFor(j).filter(([k])=>!(it[k]&&it[k].r)).length, out=[];
+  const wsMissing=(j,d)=>{ const it=d.items||{}, n=wsReqItems(j,d).filter(([k])=>!(it[k]&&it[k].r)).length, out=[];
     if(!preDone(d)) out.push("pre-repair inspection"); if(n) out.push(n+" inspection item"+(n>1?"s":"")); if(!String(d.odo||"").replace(/\D/g,"")) out.push("out odometer"); return out; };
   function viewJobDetail(j){
     const car=carImgOf(j), key=keyPhotoOf(j), v=db.vehicles.find(x=>x.id===j.vehicleId)||{}, wo=isWO(j);
@@ -2306,7 +2310,7 @@
     const missing=wo?wsMissing(j,d):[];
     // three stages: pre-repair (drive check + general inspection), repair, post-repair (test drive + out odometer)
     const isDriveG=g=>/test drive|drive test/i.test(g), gKeys=f=>wo?wsGroupsFor(j).filter(([g])=>f(isDriveG(g))).flatMap(x=>x[1]).map(x=>x[0]):[];
-    const preKeys=gKeys(x=>!x), postKeys=gKeys(x=>x), rated=k=>!!(d.items[k]&&d.items[k].r);
+    const preKeys=gKeys(x=>!x), postKeys=d.noDrive?[]:gKeys(x=>x), rated=k=>!!(d.items[k]&&d.items[k].r);
     const preN=preKeys.filter(rated).length+preCount(d), preT=preKeys.length+PRE_ITEMS.length, preOK=preN>=preT;
     const odoOK=!!String(d.odo||"").replace(/\D/g,""), postN=postKeys.filter(rated).length+(odoOK?1:0), postT=postKeys.length+1, postOK=postN>=postT;
     const runK=k=>{ const r=runningTask(me.id); return !!(r&&r.jobId===j.id&&r.lineKey===k); };
@@ -2337,7 +2341,7 @@
         ${wo?`<div class="tjd-tabs t3"><button type="button" data-tjt="pre" class="${tabT==="pre"?"on":""}">Pre-repair <small class="${preOK?"ok":"need"}">${preN}/${preT}</small></button><button type="button" data-tjt="rep" class="${tabT==="rep"?"on":""}">Repair <small class="${allDone?"ok":"need"}">${groups.filter(gDone).length}/${groups.length}</small></button><button type="button" data-tjt="post" class="${tabT==="post"?"on":""}">Post-repair <small class="${postOK?"ok":"need"}">${postN}/${postT}</small></button></div>${waitBar}${histBtn(j)}`:""}</div>
       <div class="ws tjd-wrap">
       ${tabT==="pre"?stageBar("__pre","Pre-repair inspection",preOK)+preHTML(d,dis,j)+wsInspHTML(d,dis,j,"pre")+`<div class="tjd-next"><button class="btn ghost" data-tjt="rep" type="button">Go to repair \u203a</button></div>`
-      :tabT==="post"?stageBar("__post","Post-repair test drive",postOK)+wsInspHTML(d,dis,j,"post")+`
+      :tabT==="post"?(d.noDrive?"":stageBar("__post","Post-repair test drive",postOK))+wsInspHTML(d,dis,j,"post")+`
       <div class="card"><div class="two"><div><label style="margin-top:0">Out odometer <span class="muted" style="text-transform:none;letter-spacing:0">(required)</span></label>${odoBox(`id="wsOdo" class="mono ${odoOK?"fld-ok":"fld-need"}" placeholder="Mileage when done" ${dis}`,d.odo||(isKm(j.mileage)?" km":""))}</div><div></div></div>
         <div class="muted" style="font-size:12px;margin-top:6px" id="wsStamp">Saves automatically.</div>
         ${can&&!j.done?(!allDone?`<div class="tjd-left">Finish every repair on the Repair tab before closing out the car.</div>`:missing.length?`<div class="tjd-left">Still needed before the car is finished: <b>${esc(missing.join(", "))}</b>.${!preOK?` <button class="btn ghost sm" data-tjt="pre" type="button" style="margin-top:8px">Open pre-repair</button>`:""}</div>`:`<button class="btn finish tjd-carfin" id="tjFinish" type="button">\u2713 Car is finished</button>`):""}</div>`:`
@@ -6105,11 +6109,14 @@
   const isEV=j=>!!(j&&(EV_MAKE.test(String(j.make||""))||EV_MODEL.test(String(j.model||""))||/electric|\bkwh\b|\bev\b/i.test(String(j.engine||""))));
   const wsGroupsFor=j=>isEV(j)?WS_GROUPS_EV:WS_GROUPS;
   const wsItemsFor=j=>isEV(j)?WS_ITEMS_EV:WS_ITEMS;
+  // a car that can't be driven skips the post-repair test drive (d.noDrive on the worksheet)
+  const isDriveGroup=g=>/test drive|drive test/i.test(g);
+  const wsReqItems=(j,d)=>d&&d.noDrive?wsGroupsFor(j).filter(([g])=>!isDriveGroup(g)).flatMap(x=>x[1]):wsItemsFor(j);
   function wsProgress(j,d){
     const it=d.items||{};
     const lab=(j.labor||[]).filter(l=>!l[5]&&(String(l[0]).trim()||(!l[6]&&(j.parts||[]).some(p=>p.jobKey===l[4]&&String(p.desc||"").trim()&&!p.declined))));
     const odo=String(d.odo||"").replace(/\D/g,"")?1:0;
-    const WI=wsItemsFor(j), total=WI.length+lab.length+1, doneN=WI.filter(([k])=>it[k]&&it[k].r).length+lab.filter(l=>(d.labor||{})[l[4]]).length+odo;
+    const WI=wsReqItems(j,d), total=WI.length+lab.length+1, doneN=WI.filter(([k])=>it[k]&&it[k].r).length+lab.filter(l=>(d.labor||{})[l[4]]).length+odo;
     return total?Math.round(doneN/total*100):0;
   }
   const wsPct = id => { const r=(db.worksheets||{})[id]; return r?r.progress:null; };
@@ -6245,6 +6252,7 @@
     const D=()=>{ const w=wsData; w.items=w.items||{}; w.labor=w.labor||{}; w.photos=w.photos||[]; return w; };
     const sizeTa=t=>{ t.style.height="auto"; t.style.height=t.scrollHeight+"px"; };
     $("#view").querySelectorAll(".ws-find").forEach(t=>{ sizeTa(t); t.oninput=()=>{ sizeTa(t); (D().items[t.dataset.wsf]=D().items[t.dataset.wsf]||{}).f=t.value; t.closest(".ws-item").classList.toggle("has-f",!!t.value); wsSave(); }; });
+    $("#view").querySelectorAll("[data-nodrive]").forEach(b=>b.onclick=()=>{ const v=b.dataset.nodrive==="1"; if(!!D().noDrive===v) return; D().noDrive=v; wsSave(true); renderWorksheetKeep(); });
     $("#view").querySelectorAll("[data-wsr]").forEach(b=>b.onclick=()=>{ const x=D().items[b.dataset.wsr]=D().items[b.dataset.wsr]||{}; x.r=x.r===b.dataset.v?"":b.dataset.v; wsSave(); renderWorksheetKeep(); });
     $("#view").querySelectorAll("[data-wsl]").forEach(c=>c.onchange=()=>{ D().labor[c.dataset.wsl]=c.checked; c.parentElement.classList.toggle("on",c.checked); wsSave(); });
     const odo=$("#wsOdo"); if(odo) odo.oninput=()=>{ D().odo=odoVal(odo); if(odo.closest(".tjd-wrap")){ const f=!!D().odo.replace(/\D/g,""); odo.classList.toggle("fld-ok",f); odo.classList.toggle("fld-need",!f); } wsSave(); };
@@ -6324,12 +6332,14 @@
     if(!urls[at]){ toast("Photo still loading \u2014 try again in a second"); return; }
     lightbox(urls.map((u,k)=>u||null).filter(Boolean), urls.slice(0,at).filter(Boolean).length); },true);
   function wsInspHTML(d,dis,j,part){ const it=d.items=d.items||{};
-    const gs=wsGroupsFor(j).filter(([g])=>!part||(part==="post")===/test drive|drive test/i.test(g)), LS=lastSeen(j);
+    const gs=wsGroupsFor(j).filter(([g])=>!part||(part==="post")===isDriveGroup(g)), LS=lastSeen(j);
+    const nd=!!d.noDrive, driveQ=`<div class="nodrive ${nd?"off":""}"><span>Is the vehicle drivable?</span><div class="nd-btns"><button type="button" class="${nd?"":"on"}" data-nodrive="0" ${dis}>Yes \u2014 test drive it</button><button type="button" class="${nd?"on":""}" data-nodrive="1" ${dis}>No \u2014 not drivable</button></div>${nd?'<div class="nd-note">Not drivable \u2014 the post-repair test drive is waived.</div>':""}</div>`;
+    let asked=false; const groupHTML=(g,inner)=>{ if(!isDriveGroup(g)) return inner(); const q=asked?"":driveQ; asked=true; return q+(nd?"":inner()); };
     return `      <div class="card"><h2>${part==="post"?"Post-repair test drive":"General inspection"}</h2>
-        ${isEV(j)?'<div class="hint" style="margin:-4px 0 8px">Electric vehicle inspection</div>':""}${part==="post"?"":priorHTML(j)}${gs.map(([g,items])=>`<div class="ws-group">${esc(g)}</div>${items.map(([k,l])=>{ const x=it[k]||{}; return `<div class="ws-item ${x.r?"is-"+x.r:""} ${x.f||(k==="tpress"&&d.tp&&Object.values(d.tp).some(Boolean))?"has-f":""}">
+        ${isEV(j)?'<div class="hint" style="margin:-4px 0 8px">Electric vehicle inspection</div>':""}${part==="post"?"":priorHTML(j)}${gs.map(([g,items])=>groupHTML(g,()=>`<div class="ws-group">${esc(g)}</div>${items.map(([k,l])=>{ const x=it[k]||{}; return `<div class="ws-item ${x.r?"is-"+x.r:""} ${x.f||(k==="tpress"&&d.tp&&Object.values(d.tp).some(Boolean))?"has-f":""}">
           <div class="ws-name">${esc(l)}</div>${lastLine(LS[k])}
           <div class="ws-rate">${[["ok","OK"],["watch","Watch"],["repair","Repair"],["na","N/A"]].map(([v,t])=>`<button type="button" class="r-${v} ${x.r===v?"on":""}" data-wsr="${k}" data-v="${v}" ${dis}>${t}</button>`).join("")}</div>
-          <textarea class="ws-find" data-wsf="${k}" rows="1" placeholder="Findings" ${dis}>${esc(x.f||"")}</textarea>${k==="tpress"?tpHTML(d,dis):""}</div>`; }).join("")}`).join("")}
+          <textarea class="ws-find" data-wsf="${k}" rows="1" placeholder="Findings" ${dis}>${esc(x.f||"")}</textarea>${k==="tpress"?tpHTML(d,dis):""}</div>`; }).join("")}`)).join("")}
       </div>`; }
   // the worksheet lives in two places: its own page (office) and built into the technician's car page
   const wsInCar=()=>tab==="jobs"&&viewJobs.open&&viewJobs.open===wsOpenId;
