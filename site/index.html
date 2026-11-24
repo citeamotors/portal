@@ -1509,6 +1509,27 @@
     }catch(e){ /* offline: try again next time the app comes back */ }
     finally{ resync.busy=false; resync.at=Date.now(); }
   }
+  // safety net for live updates: a computer left open can lose its live connection without noticing (Wi-Fi blip, sleep),
+  // so new or changed work orders, customers and vehicles never show up. Every 30 s (and when the window is clicked into)
+  // ask only for rows changed since the last check, and reconnect live updates if the connection isn't joined.
+  async function catchUp(){
+    if(!me||sessionDead||resync.busy||catchUp.busy) return; catchUp.busy=true;
+    try{
+      const ms=t=>Date.parse(String(t).replace(/(\.\d{3})\d+/,"$1"));
+      if(!catchUp.since) catchUp.since=Date.now()-10*60000;
+      let max=catchUp.since;
+      for(const k of ["customers","vehicles","jobs"]){
+        const {data,error}=await sb.from(SPEC[k].table).select(k==="vehicles"?VEH_COLS_NO_PHOTO()+",updated_at":"*").gt("updated_at",new Date(catchUp.since).toISOString()).limit(500);
+        if(error) throw error;
+        (data||[]).forEach(r=>{ const t=ms(r.updated_at); if(t>max) max=t; applyRemote({table:SPEC[k].table,eventType:"UPDATE",new:r,lite:k==="vehicles"}); });
+      }
+      catchUp.since=max>catchUp.since?max+1:max;   // +1 ms: the server keeps microseconds
+      if(channel&&!["joined","joining"].includes(channel.state)) subscribe();
+    }catch(e){ /* offline: next round */ }
+    finally{ catchUp.busy=false; }
+  }
+  setInterval(()=>{ if(document.visibilityState==="visible") catchUp(); },30000);
+  addEventListener("focus",()=>{ if(Date.now()-(catchUp.last||0)>5000){ catchUp.last=Date.now(); catchUp(); } });
   let hiddenAt=0;
   document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden"){ hiddenAt=Date.now(); if(woCtl&&woCtl.flush){ try{ woCtl.flush(); }catch(e){} } flushPush(); return; }
     if(me&&hiddenAt&&Date.now()-hiddenAt>15000) resync(); hiddenAt=0; });
