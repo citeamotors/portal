@@ -1439,6 +1439,11 @@
     if(ev==="DELETE"){ const i=arr.findIndex(o=>o.id===od.id); if(i>=0) arr.splice(i,1); snap[k]&&snap[k].delete(od.id); return scheduleRender(); }
     const o=fromRow(k,nw), i=arr.findIndex(x=>x.id===o.id);
     if(pl.lite&&i>=0){ if(o.photo===undefined&&arr[i].photo!==undefined) o.photo=arr[i].photo; if(o.keyPhoto===undefined&&arr[i].keyPhoto!==undefined) o.keyPhoto=arr[i].keyPhoto; }   // photos aren't in a light reload
+    // live updates leave out big unchanged columns (photos, the extra fields): keep what this device already has for anything the update didn't send
+    if(i>=0&&pl.eventType==="UPDATE"){ const cur=arr[i], sp=SPEC[k];
+      for(const [f,c] of Object.entries(sp.map)) if(!(c in nw)&&cur[f]!==undefined&&o[f]===undefined) o[f]=cur[f];
+      if(!("extra" in nw)){ const mf=new Set(Object.keys(sp.map)); for(const f in cur) if(!mf.has(f)&&!f.startsWith("_")&&o[f]===undefined) o[f]=cur[f]; }
+      if(k==="vehicles"&&o.keyPhoto===undefined&&cur.keyPhoto!==undefined&&!(nw.extra&&"keyPhoto" in nw.extra)) o.keyPhoto=cur.keyPhoto; }
     if(k==="inventory"&&i>=0&&arr[i].cost!==undefined) o.cost=arr[i].cost;
     const j=JSON.stringify(toRow(k,o)); if(snap[k]&&snap[k].get(o.id)===j) return;
     { const cj=rowSig(toRow(k,o)), sj=snap[k]&&snap[k].has(o.id)?rowSig(JSON.parse(snap[k].get(o.id))):null;
