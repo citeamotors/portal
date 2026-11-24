@@ -2375,7 +2375,7 @@
         </div>`; }).join("")+`<div class="labor-total tjob-tot"><span>${me.role==="manager"?"Tech hours":"Your hours"}</span><span>${techHrs(j).toFixed(2)} hrs</span></div>`
         :`<div class="muted">${esc(j.title||"No repair lines yet.")}</div>`}
         ${j.notes?`<div class="job-notes" style="margin-top:10px">${esc(j.notes)}</div>`:""}
-        <label>Tech notes</label><textarea id="wsNotes" rows="4" placeholder="Anything the office should know" ${dis}>${esc(d.notes||"")}</textarea>
+        <label>Tech notes</label><div class="hint" style="margin:-2px 0 6px">The customer sees these notes on their repair page and invoice.</div><textarea id="wsNotes" rows="4" placeholder="What you found and did, and anything they should keep an eye on" ${dis}>${esc(d.notes||"")}</textarea>
         <div class="muted" style="font-size:12px;margin-top:6px">Saves automatically.</div>
         ${can&&!j.done&&allDone?`<div class="tjd-next" style="margin-top:12px"><button class="btn" data-tjt="post" type="button">All repairs done \u2014 go to post-repair \u203a</button></div>`:""}
       </div>
@@ -6241,7 +6241,7 @@
         ${lab.length?lab.map(l=>`<label class="ws-task ${d.labor[l[4]]?"on":""}"><input type="checkbox" data-wsl="${l[4]}" ${d.labor[l[4]]?"checked":""} ${dis}><span>${esc(l[0])}${l[7]?`<small class="ws-note">${esc(l[7])}</small>`:""}</span><b class="mono">${techHrsOf(l).toFixed(2)}</b></label>`).join(""):'<div class="muted">No labor lines on this work order.</div>'}
       </div>
       <div class="card"><div class="two"><div><label style="margin-top:0">Out odometer</label>${odoBox(`id="wsOdo" class="mono" ${dis}`,d.odo||(isKm(j.mileage)?" km":""))}</div><div></div></div>
-        <label>Tech notes</label><textarea id="wsNotes" rows="4" placeholder="Anything the office should know" ${dis}>${esc(d.notes||"")}</textarea></div>
+        <label>Tech notes</label><div class="hint" style="margin:-2px 0 6px">The customer sees these notes on their repair page and invoice.</div><textarea id="wsNotes" rows="4" placeholder="What you found and did, and anything they should keep an eye on" ${dis}>${esc(d.notes||"")}</textarea></div>
       ${wsPhotos("after","Photos",ph("after"),can)}
     </div>`;
     const wki=$("#wsKeyImg"); if(wki) wki.onclick=()=>showKeyPhoto(j);
