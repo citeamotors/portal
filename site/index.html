@@ -1354,12 +1354,12 @@
             const diff={}; Object.keys(r).forEach(c=>{ if(c!=="id"&&JSON.stringify(r[c])!==JSON.stringify(prev[c])) diff[c]=r[c]; });
             Object.keys(prev).forEach(c=>{ if(!(c in r)) diff[c]=null; });
             if(!Object.keys(diff).length){ old.set(p.pk(r),JSON.stringify(r)); continue; }
-            const {error}=await sb.from(p.t).update(diff).eq("id",r.id); if(error) failures.push(error.message); else old.set(p.pk(r),JSON.stringify(r)); }
+            const {error}=await sb.from(p.t).update(diff).eq("id",r.id); if(error) failures.push(error.message); else { old.set(p.pk(r),JSON.stringify(r)); markPushed(p.key,p.pk(r),r); } }
           else fresh.push(...up);
           up.length=0; up.push(...fresh);
           // rows with different fields go up separately: in one batch a field one row doesn't have would be sent as empty (null)
           const groups={}; up.forEach(r=>{ const k=Object.keys(r).sort().join(","); (groups[k]=groups[k]||[]).push(r); });
-          for(const g of Object.values(groups)){ const {error}=await sb.from(p.t).upsert(g); if(error) failures.push(error.message); else g.forEach(r=>old.set(p.pk(r),JSON.stringify(r))); } }
+          for(const g of Object.values(groups)){ const {error}=await sb.from(p.t).upsert(g); if(error) failures.push(error.message); else g.forEach(r=>{ old.set(p.pk(r),JSON.stringify(r)); markPushed(p.key,p.pk(r),r); }); } }
         const gone=[...old.keys()].filter(id=>!seen.has(id)); if(gone.length) dels.push({p,old,gone});
         snap[p.key]=old;
       }
@@ -1388,6 +1388,9 @@
   // live updates from other devices
   let channel=null, renderTimer=null;
   const TABLE_KEY=Object.fromEntries(ORDER.map(k=>[SPEC[k].table,k]));
+  const pushHist=new Map(); // "key:id" -> last versions this device saved (key order ignored)
+  const rowSig=r=>canonJ(Object.fromEntries(Object.entries(r||{}).filter(([,v])=>v!==null&&v!==undefined)));   // empty fields don't count
+  function markPushed(k,id,row){ const h=pushHist.get(k+":"+id)||[]; h.push(rowSig(row)); if(h.length>15) h.shift(); pushHist.set(k+":"+id,h); }
   function applyRemote(pl){
     const t=pl.table, ev=pl.eventType, nw=pl.new||{}, od=pl.old||{};
     if(t==="profiles"){ loadUsersOnly(); return; }
@@ -1419,6 +1422,9 @@
     const o=fromRow(k,nw), i=arr.findIndex(x=>x.id===o.id);
     if(k==="inventory"&&i>=0&&arr[i].cost!==undefined) o.cost=arr[i].cost;
     const j=JSON.stringify(toRow(k,o)); if(snap[k]&&snap[k].get(o.id)===j) return;
+    { const cj=rowSig(toRow(k,o)), sj=snap[k]&&snap[k].has(o.id)?rowSig(JSON.parse(snap[k].get(o.id))):null;
+      if(cj===sj) return;                                                        // same data, keys in a different order
+      if(sj!==null&&(pushHist.get(k+":"+o.id)||[]).slice(0,-1).includes(cj)) return; }   // a late copy of an older save from this device
     // this device has a newer change to the same record that hasn't finished saving: keep it (it's on its way up)
     if(i>=0&&snap[k]&&snap[k].has(o.id)&&JSON.stringify(toRow(k,arr[i]))!==snap[k].get(o.id)&&(pushing||pushTimer)){ queuePush(); return; }
     // update the record in place, so screens that are holding it (an open work order) keep saving to the live copy
@@ -5615,7 +5621,7 @@
     // read every field back into j (so re-renders keep typed values)
     const pull=()=>{
       const v=s=>{ const e=$(s); return e?e.value:undefined; };
-      j._costs=j._costs||{};
+      j._costs=j._costs||{...((db.woCosts||{})[j.id]||{})};
       if(newCust){ j._cName=v("#cName")?.trim(); j._cPhone=v("#cPhone")?.trim(); j._cEmail=v("#cEmail")?.trim(); const ct=$("#cTextOk"); if(ct) j._cTextOk=ct.checked; }
       Object.assign(j,{year:v("#vYear").trim(),make:v("#vMake").trim(),model:v("#vModel").trim(),vin:v("#vVin").replace(/\s/g,"").toUpperCase(),mileage:$("#vMiles")?odoVal($("#vMiles")):undefined,engine:(v("#vEngine")||"").trim(),plate:(v("#vPlate")||"").trim().toUpperCase(),
         title:v("#wTitle").trim(),status:v("#wStatus"),assignee:v("#wTech"),techs:[...$("#view").querySelectorAll("[data-crew]")].filter(e=>e.checked&&e.dataset.crew!==v("#wTech")).map(e=>e.dataset.crew),priority:v("#wPri"),date:v("#wDate")||todayStr(),
@@ -5817,7 +5823,7 @@
       if(existing && lastApproval(j) && !validApproval(j) && j.status!=="estimate"){ j.preApprStatus=j.status; j.status="estimate"; backToEst=true; }
       else if(existing && j.status==="estimate" && j.preApprStatus && (restored=validApproval(j))){ j.status=j.preApprStatus; delete j.preApprStatus; }
       if(canCost()){ const keep={}; j.parts.forEach(p=>{ if(j._costs[p.lid]!=null) keep[p.lid]=j._costs[p.lid]; }); db.woCosts=db.woCosts||{}; if(Object.keys(keep).length) db.woCosts[j.id]=keep; else delete db.woCosts[j.id]; }
-      delete j._costs;
+      j._costs={...((db.woCosts||{})[j.id]||{})};   // keep the editor's copy: the cost boxes are redrawn from it
       if(newCust){ const c={id:uid(),name:j._cName,phone:fmtPhone(j._cPhone||""),email:j._cEmail||"",...(j._cTextOk?{textOk:true,textOkAt:Date.now()}:{})}; db.customers.push(c); j.customerId=c.id; }
       delete j._cName; delete j._cPhone; delete j._cEmail; delete j._cTextOk;
       // create or update the vehicle record
