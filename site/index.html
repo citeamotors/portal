@@ -278,9 +278,18 @@
   .jblk.other .jhead,.jblk.jwhole .jhead{background:var(--sub);color:var(--ink)}
   .jno{flex:none;width:34px;height:34px;display:grid;place-items:center;border:2px solid currentColor;font:700 17px var(--mono)}
   .jht{min-width:0;flex:1}
+  @media (max-width:700px){ .jhead{flex-wrap:wrap} .jacts{order:9;width:100%} .later-row{flex-wrap:wrap} .later-t{flex-basis:100%} }
   .jht b{display:block;font-size:16px;letter-spacing:.12em;text-transform:uppercase}
   .jht span{display:block;font-size:12.5px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .jhtot{font-size:15px;font-weight:700;white-space:nowrap}
+  .jacts{display:flex;gap:6px;flex-wrap:wrap}
+  .jact{background:transparent;color:inherit;border:1px solid rgba(255,255,255,.45);padding:5px 9px;font:600 11px/1 Montserrat,sans-serif;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;border-radius:0}
+  .jact:hover{border-color:#fff}.jact.on{background:#C8201F;border-color:#C8201F;color:#fff}
+  .warr-note{margin:8px 12px 0}
+  .later-box{border:2px solid var(--ink);margin-bottom:14px}
+  .later-h{background:var(--ink);color:var(--paper,#fff);padding:9px 12px;display:flex;flex-direction:column}.later-h b{font-size:12px;letter-spacing:.12em;text-transform:uppercase}.later-h span{font-size:12.5px;opacity:.8}
+  .later-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border-top:1px solid var(--line,#ddd)}.later-row:first-of-type{border-top:0}
+  .later-t{flex:1;min-width:0;display:flex;flex-direction:column}.later-t small{color:var(--steel,#686868);font-size:12px}
   .jhead .jx{color:inherit;position:static;transform:none}
   .jsec{padding:4px 12px 12px;border-left:4px solid transparent}
   .jsec.lab{background:rgba(127,127,127,.05)}
@@ -3282,7 +3291,7 @@
     });
   }
   // ---------- report center (modeled on Tekmetric / Shopmonkey / Mitchell 1 Manager SE reports) ----------
-  const REP_CATS=[["ourcars","Our cars"],["overview","Overview"],["sales","Sales"],["payments","Payments"],["profit","Profit"],["techs","Technicians"],["customers","Customers"],["estimates","Estimates"],["parts","Parts & inventory"],["wip","Work in progress"]];
+  const REP_CATS=[["ourcars","Our cars"],["overview","Overview"],["sales","Sales"],["payments","Payments"],["profit","Profit"],["techs","Technicians"],["customers","Customers"],["estimates","Estimates"],["warranty","Warranty"],["parts","Parts & inventory"],["wip","Work in progress"]];
   function repRange(){
     const key=viewReports.range||"week";
     if(key==="custom"){ const f=viewReports.from||todayStr(), t=viewReports.to||f; const a=new Date(f+"T00:00").getTime(), b=new Date(t+"T00:00").getTime()+86400000;
@@ -3421,7 +3430,12 @@
     // ---- Estimates ----
     const declinedRows=[]; ers.forEach(r=>{ const s=r.snapshot||{}, j=db.jobs.find(x=>x.id===r.wo_id)||{}, c=custOf(j)||{}; const keys=r.status==="declined"?(s.jobs||[]).map(x=>x.key):(r.declined_jobs||[]).map(String);
       (s.jobs||[]).filter(x=>keys.includes(String(x.key))).forEach(x=>declinedRows.push(trow1([dt(new Date(r.decided_at||r.created_at).getTime()),esc(c.name||s.customer||"\u2014"),`<span class="mono">${esc(fmtPhone(c.phone)||"")}</span>`,esc(s.vehicle||vehOf(j)),esc(x.title||"")].concat(fin?[[money(Number(x.total||0))]]:[]),j))); });
-    S.estimates=card("Close ratio", kv([["Estimates sent",ers.length],["Approved",ers.filter(r=>r.status==="approved").length],["Declined",ers.filter(r=>r.status==="declined").length],["Still waiting on customer",ers.filter(r=>r.status==="sent").length],
+    const laterOpen=[]; for(const x of db.jobs) for(const e of (x.later||[])) if(!e.dismissed&&!(e.usedOn&&db.jobs.some(y=>y.id===e.usedOn))) laterOpen.push({x,e});
+    const laterCard=card("Saved for later (call these customers back)", tbl([["Saved"],["Customer"],["Phone"],["Vehicle"],["Job"]].concat(fin?[["Value","num"]]:[]),
+      laterOpen.sort((a,b)=>b.e.savedAt-a.e.savedAt).map(({x,e})=>trow1([dt(e.savedAt),name(x),esc((custOf(x)||{}).phone||""),esc(vehOf(x)),esc(e.title)].concat(fin?[[money(e.total)]]:[]),x)),
+      laterOpen.length&&fin?trow(["<b>Total</b>","","","","",[`<b>${money(r2(laterOpen.reduce((a,y)=>a+Number(y.e.total||0),0)))}</b>`]]):""),
+      "Jobs a customer put off for another day. They show at the top of the Jobs the next time that car comes in. Not limited to the dates above.");
+    S.estimates=laterCard+card("Close ratio", kv([["Estimates sent",ers.length],["Approved",ers.filter(r=>r.status==="approved").length],["Declined",ers.filter(r=>r.status==="declined").length],["Still waiting on customer",ers.filter(r=>r.status==="sent").length],
         ["Approval rate (by count)",pct(ers.filter(r=>r.status==="approved").length,decided.length)]].concat(fin?[["Written (decided estimates)",money(written)],["Approved",money(approvedV)],["Close ratio (by dollars)",close]]:[])),
         "Close ratio = dollars approved \u00f7 dollars written, the Tekmetric way.")
       +card("Declined work to follow up", tbl([["Declined"],["Customer"],["Phone"],["Vehicle"],["Job"]].concat(fin?[["Amount","num"]]:[]), declinedRows), "Jobs the customer said no to. Call them back when they're due.")
@@ -3443,6 +3457,34 @@
       +card("Waiting", tbl([["Customer"],["Vehicle"],["Job"],["Technician"]], open.filter(j=>j.status==="waiting_parts").map(j=>trow1([name(j),esc(vehOf(j)),esc(j.title),esc(crewNames(j))],j))))
       +moreReports(R, done, open, fin, card, tbl, "wip");
 
+    // ---- Warranty / comebacks: cars that came back for work we already did, the hours it took, and what it cost us
+    { const rows=[], hrOf=p=>p&&p.pay_type!=="flag"?Number(p.hourly_rate||0):0, frOf=p=>p&&(p.pay_type==="flag"||p.pay_type==="hourly_flag")?Number(p.flag_rate||0):0;
+      const whenOf=x=>doneWO(x)?doneAt(x):new Date((x.date||todayStr())+"T12:00").getTime();
+      for(const j of db.jobs){ if(!isWO(j)||!j.warranty) continue; const ts=whenOf(j); if(!inR(ts)) continue; const rate=j.rate||defaultRate(j.make);
+        for(const [key,w] of Object.entries(j.warranty)){ const lab=(j.labor||[]).filter(l=>(l[4]===key||l[6]===key)&&String(l[0]||"").trim()); const pts=(j.parts||[]).filter(p=>p.jobKey===key&&String(p.desc||"").trim());
+          if(!lab.length&&!pts.length) continue;
+          const segs=db.jobTime.filter(x=>x.jobId===j.id&&x.lineKey===key); let ms=0, pay=0;
+          for(const x of segs){ const d=Math.max(0,(x.end||Date.now())-x.start); ms+=d; pay+=d/3600000*hrOf(payOf(x.userId)); }
+          const techH=lab.reduce((a,l)=>a+techHrsOf(l),0), timed=ms/3600000, hrs=r2(timed>0?timed:techH);
+          if(!(timed>0)) pay+=hrs*hrOf(payOf(j.assignee));
+          pay+=techH*frOf(payOf(j.assignee));
+          let pc=0; pts.forEach(p=>{ const c=partCost(j,p); pc+=Number(p.qty||0)*(c!=null?c:Number(p.price||0)); });
+          const o=w.of&&db.jobs.find(x=>x.id===w.of);
+          rows.push({j,key,w,o,title:String((lab[0]||[])[0]||(pts[0]||{}).desc||"Job"),hrs,timed:timed>0,lost:r2(hrs*rate),pc:r2(pc),pay:r2(pay),days:o?Math.max(0,Math.round((ts-whenOf(o))/86400000)):null}); } }
+      const cars=new Set(rows.map(x=>x.j.vehicleId||x.j.vin||x.j.id)), H=r2(rows.reduce((a,x)=>a+x.hrs,0)), L=r2(rows.reduce((a,x)=>a+x.lost,0)), PC=r2(rows.reduce((a,x)=>a+x.pc,0)), PY=r2(rows.reduce((a,x)=>a+x.pay,0));
+      const wos=[...new Set(rows.map(x=>x.j))];
+      const byTech={}; rows.forEach(x=>{ const ids=x.o?crewIds(x.o):[]; (ids.length?ids:["?"]).forEach(id=>{ const b=byTech[id]=byTech[id]||{n:0,h:0,l:0,list:[]}; b.n++; b.h+=x.hrs/(ids.length||1); b.l+=x.lost/(ids.length||1); b.list.push(x.j); }); });
+      S.warranty=card("Warranty &amp; comebacks", kvT([["Cars that came back",cars.size,wos],["Warranty jobs",rows.length,wos],["Hours spent on warranty",H.toFixed(2)]]
+          .concat(fin?[["Lost labor sales (hours \u00d7 our labor rate)",money(L)],["Parts we paid for (our cost)",money(PC)],["Tech pay for warranty work",money(PY)],["Out of pocket (parts + tech pay)",money(r2(PC+PY))],["Total cost incl. lost labor (lost labor + parts)",money(r2(L+PC))]]:[])),
+          "A job counts when it's marked Warranty on the work order. Hours come from the technicians' job timers (or the job's tech hours if no timer was used). Lost labor is what those hours would have billed at the shop's labor rate.")
+        +card("Comebacks", tbl([["Date"],["Invoice"],["Customer"],["Vehicle"],["Job"],["Original visit"],["Hours","num"]].concat(fin?[["Lost labor","num"],["Parts cost","num"],["Tech pay","num"]]:[]),
+          rows.sort((a,b)=>whenOf(b.j)-whenOf(a.j)).map(x=>trow1([dt(whenOf(x.j)),no(x.j),name(x.j),esc(vehOf(x.j)),esc(x.title)+(x.w.note?`<div class="muted" style="font-size:12px">${esc(x.w.note)}</div>`:""),
+            x.o?`${x.o.number?"#"+esc(x.o.number):"Visit"} \u00b7 ${x.days} day${x.days===1?"":"s"} earlier`:'<span class="muted">Not set</span>',[x.hrs.toFixed(2)+(x.timed?"":"*")]].concat(fin?[[money(x.lost)],[money(x.pc)],[money(x.pay)]]:[]),x.j)),
+          rows.length?trow(["<b>Total</b>","","","","","",[`<b>${H.toFixed(2)}</b>`]].concat(fin?[[`<b>${money(L)}</b>`],[`<b>${money(PC)}</b>`],[`<b>${money(PY)}</b>`]]:[])):""),
+          "* no job timer was used, so the job's tech hours are shown.")
+        +card("Comebacks by the technician who did the original work", tbl([["Technician"],["Comebacks","num"],["Hours","num"]].concat(fin?[["Lost labor","num"]]:[]),
+          Object.entries(byTech).sort((a,b)=>b[1].n-a[1].n).map(([id,b])=>trowT([id==="?"?'<span class="muted">Original visit not set</span>':esc(userName(id)),[b.n],[r2(b.h).toFixed(2)]].concat(fin?[[money(r2(b.l))]]:[]),b.list))));
+    }
     // ---- Our cars: the cars we buy, fix and sell (customer "Citea Motors"): time, parts, labor and profit per car (owners only)
     if(fin) S.ourcars=ourCarsReport(card,tbl,trow);
     const rangeBtns=[["today","Today"],["yesterday","Yesterday"],["week","This week"],["lastweek","Last week"],["month","This month"],["lastmonth","Last month"],["ytd","Year to date"],["custom","Custom"]]
@@ -4691,10 +4733,26 @@
   // the jobs a customer approves one by one: each labor line with its parts, plus loose parts
   // a labor line is a job unless it belongs to another job (labor[6] = that job's id)
   const isJobLine = (j,l) => !l[6] || !(j.labor||[]).some(p=>p[4]===l[6]&&!p[6]);
+  // warranty / comeback job: j.warranty[jobKey] = {of: original work order id, note, at, by}. No charge, no tax.
+  const isWarr = (j,key) => !!(j.warranty&&j.warranty[key]);
+  function applyWarranty(j){
+    const w=j.warranty||{}, keys=new Set((j.labor||[]).filter(l=>!l[6]).map(l=>l[4]));
+    Object.keys(w).forEach(k=>{ if(!keys.has(k)) delete w[k]; });
+    j.discounts=(j.discounts||[]).filter(d=>d.warranty!=="auto"||w[d.applies]);
+    Object.keys(w).forEach(k=>{ if(!j.discounts.some(d=>d.warranty==="auto"&&d.applies===k)) j.discounts.push({desc:"Warranty \u2014 no charge",applies:k,type:"%",value:100,warranty:"auto"}); });
+  }
+  // jobs the customer put off for another day: j.later = [{id,title,labor,parts,discounts,total,savedAt,by,usedOn,dismissed}]
+  function laterFor(j){
+    const out=[], used=e=>e.dismissed||(e.usedOn&&(e.usedOn===j.id||db.jobs.some(x=>x.id===e.usedOn)));
+    for(const x of db.jobs){ if(!isWO(x)||!j.customerId||x.customerId!==j.customerId) continue;
+      if(j.vehicleId&&x.vehicleId&&x.vehicleId!==j.vehicleId) continue;
+      const src=x.id===j.id?j:x; for(const e of (src.later||[])) if(!used(e)) out.push({src,x,e}); }
+    return out;
+  }
   function jobGroups(j, withDeclined){
     const rate=j.rate||defaultRate(j.make), tx=SET().tax, out=[];
     const mk=(key,title,labor,parts,declined)=>{
-      const lab=r2(labor.reduce((s,l)=>s+lineAmt(l,rate),0)), par=r2(parts.reduce((s,p)=>s+Number(p.qty||0)*Number(p.price||0),0)), tax=r2(par*tx);
+      const lab=r2(labor.reduce((s,l)=>s+lineAmt(l,rate),0)), par=r2(parts.reduce((s,p)=>s+Number(p.qty||0)*Number(p.price||0),0)), tax=isWarr(j,key)?0:r2(par*tx);
       const disc=r2((j.discounts||[]).filter(d=>d.applies===key&&discOn(d)).reduce((s,d)=>s+Math.min(lab+par, d.type==="%"?(lab+par)*Number(d.value||0)/100:Number(d.value||0)),0));
       return {key,title,labor,parts,declined,lab,par,tax,disc,total:r2(Math.max(0,lab+par+tax-disc))};
     };
@@ -4719,7 +4777,7 @@
     let want=false;
     if(diag&&first&&!j.noDiagWaive){
       const base=new Set(first.snapshot.jobs.map(x=>x.key));
-      const extra=g.filter(x=>x.key!==diag.key&&x.key!=="parts"&&!base.has(x.key));
+      const extra=g.filter(x=>x.key!==diag.key&&x.key!=="parts"&&!base.has(x.key)&&!isWarr(j,x.key));
       const last=(db.estimates||[]).filter(r=>r.wo_id===j.id&&(r.status==="approved"||r.status==="declined")).sort((a,b)=>String(b.decided_at||b.created_at).localeCompare(String(a.decided_at||a.created_at)))[0];
       const dec=new Set(last&&last!==first?(last.status==="declined"?extra.map(x=>x.key):(last.declined_jobs||[]).map(String)):[]);
       want=extra.some(x=>!dec.has(String(x.key)));
@@ -4729,7 +4787,7 @@
     else if(!want&&cur>=0&&j.discounts[cur].diagWaive==="auto") j.discounts.splice(cur,1);
   }
   function ensureBlankLines(j){
-    if(isWO(j)) applyDiagWaiver(j);
+    if(isWO(j)){ applyWarranty(j); applyDiagWaiver(j); }
     const hasParts=l=>!l[6]&&(j.parts||[]).some(p=>p.jobKey===l[4]&&String(p.desc||"").trim());
     const pristineL=l=>!hasParts(l)&&!String(l[0]||"").trim()&&(l[1]==null||l[1]===""||Number(l[1])===1||Number(l[1])===0)&&(l[2]==null||l[2]==="")&&(l[3]==null||l[3]==="")&&!l[5];
     const pristineP=p=>!String(p.desc||"").trim()&&!p.partId&&!Number(p.price)&&Number(p.qty||1)===1;
@@ -5468,6 +5526,25 @@
     e.classList.add(String(e.value||"").trim()?"fld-ok":"fld-need");
   }
   function paintFields(){ document.querySelectorAll(".ro-layout input,.ro-layout select,.ro-layout textarea").forEach(paintField); }
+  function laterHTML(j){
+    const sl=me.role==="manager"?laterFor(j):[]; if(!sl.length) return "";
+    const d=ms=>new Date(ms).toLocaleDateString([],{month:"short",day:"numeric"});
+    return `<div class="later-box"><div class="later-h"><b>Saved for later</b><span>${sl.length} job${sl.length>1?"s":""} the customer put off \u2014 add ${sl.length>1?"them":"it"} to this visit with one tap</span></div>
+      ${sl.map(({x,e})=>`<div class="later-row"><div class="later-t"><b>${esc(e.title)}</b><small>${x.id===j.id?"Saved from this visit":"From "+(x.number?"#"+esc(x.number)+" \u00b7 ":"")+esc(vehOf(x))} \u00b7 saved ${d(e.savedAt)}</small></div>
+        <span class="mono">${money(e.total)}</span><button class="btn sm" data-lat-add="${x.id}|${e.id}" type="button">${x.id===j.id?"Put back":"Add to this visit"}</button><button class="btn ghost sm" data-lat-x="${x.id}|${e.id}" type="button" title="Customer doesn't want it any more">Remove</button></div>`).join("")}</div>`;
+  }
+  function askWarranty(j,key,done){
+    const w=(j.warranty||{})[key]||{};
+    const past=db.jobs.filter(x=>x.id!==j.id&&isWO(x)&&((j.vehicleId&&x.vehicleId===j.vehicleId)||(j.vin&&x.vin===j.vin)||(!j.vehicleId&&!j.vin&&x.customerId===j.customerId)))
+      .sort((a,b)=>String(b.date||"").localeCompare(String(a.date||"")));
+    modal(`<h2>Warranty / comeback</h2><p class="muted" style="margin-top:0">This job fixes work we already did. The customer isn't charged for it (labor, parts or tax), and it counts in Reports \u203a Warranty.</p>
+      <label>Original work order</label><select id="wyOf"><option value="">Not listed / not sure</option>${past.map(x=>`<option value="${x.id}" ${w.of===x.id?"selected":""}>${x.number?"#"+esc(x.number)+" \u00b7 ":""}${esc(x.date||"")} \u00b7 ${esc(x.title||vehOf(x))}</option>`).join("")}</select>
+      <label>What came back (optional)</label><input id="wyNote" value="${esc(w.note||"")}" placeholder="e.g. Same noise came back after the brake job">
+      <div class="row" style="margin-top:14px">${j.warranty&&j.warranty[key]?'<button class="btn ghost" id="wyOff" type="button">Not warranty</button>':""}<span class="spacer"></span><button class="btn ghost" data-close type="button">Cancel</button><button class="btn" id="wyOk" type="button">Mark as warranty</button></div>`, root=>{
+      root.querySelector("#wyOk").onclick=()=>{ const v={of:root.querySelector("#wyOf").value||null,note:root.querySelector("#wyNote").value.trim(),at:w.at||Date.now(),by:w.by||me.id}; closeModal(); done(v); };
+      const off=root.querySelector("#wyOff"); if(off) off.onclick=()=>{ closeModal(); done(null); };
+    });
+  }
   function jobsHTML(j,t){
     const rate=t.rate, X=(attr,i)=>`<button class="x jx" type="button" ${attr}="${i}" aria-label="Remove">\u00d7</button>`;
     const has=s=>!!String(s||"").trim();
@@ -5486,7 +5563,7 @@
           <label>Price ea.<input data-p="${i}" data-f="price" data-k="${p.lid}" inputmode="decimal" class="num" placeholder="0.00" value="${Number(p.price)||has(p.desc)?p.price:""}"></label>
           <div class="jamt"><span>Amount</span><b class="mono" data-amt-p="${i}">${money(has(p.desc)?Number(p.qty||0)*Number(p.price||0):0)}</b></div></div></div>`; };
     const discRow=(d,i)=>`<div class="jrow ${has(d.desc)?"":"blank"}">
-        <div class="jdesc"><input data-d="${i}" data-f="desc" data-k="${d._k||""}" value="${esc(d.desc||"")}" placeholder="${d.applies==="all"?"Whole-order discount reason\u2026":"Discount reason\u2026"}">${has(d.desc)||!d._auto?X("data-dd",i):""}</div>
+        <div class="jdesc"><input data-d="${i}" data-f="desc" data-k="${d._k||""}" value="${esc(d.desc||"")}" placeholder="${d.applies==="all"?"Whole-order discount reason\u2026":"Discount reason\u2026"}">${(has(d.desc)||!d._auto)&&!d.warranty?X("data-dd",i):""}</div>
         <div class="jnums d3"><label>Type<select data-d="${i}" data-f="type" data-k="${d._k||""}"><option value="$" ${d.type!=="%"?"selected":""}>$</option><option value="%" ${d.type==="%"?"selected":""}>%</option></select></label>
           <label>Value<input data-d="${i}" data-f="value" data-k="${d._k||""}" inputmode="decimal" class="num" value="${d.value??""}"></label>
           <div class="jamt"><span>Amount</span><b class="mono" data-amt-d="${i}">\u2212${money(discOn(d)?discAmt(j,d):0)}</b></div></div></div>`;
@@ -5500,7 +5577,8 @@
       const discs=(j.discounts||[]).map((d,i)=>[d,i]).filter(([d])=>d.applies===key);
       return `<div class="jblk ${l[5]?"declined":""} ${blank?"blank":""}">
         <div class="jhead"><span class="jno">${blank?"+":n}</span><div class="jht"><b>${blank?"New job":"Job "+n}</b><span>${blank?"Type the job below to add it":esc(has(l[0])?l[0]:(g?g.title:"Parts"))}</span></div>
-          ${!blank&&g?`<span class="jhtot mono" data-jtot="${key}">${money(g.total)}</span>`:""}${blank?"":X("data-dl",li)}</div>
+          ${!blank&&g?`<span class="jhtot mono" data-jtot="${key}">${money(g.total)}</span>`:""}${!blank&&me.role==="manager"&&isWO(j)?`<div class="jacts"><button class="jact ${isWarr(j,key)?"on":""}" data-warr="${key}" type="button">${isWarr(j,key)?"\u2713 ":""}Warranty</button>${l[5]?"":`<button class="jact" data-later="${li}" type="button">Save for later</button>`}</div>`:""}${blank?"":X("data-dl",li)}</div>
+        ${isWarr(j,key)?(()=>{ const w=j.warranty[key], o=w.of&&db.jobs.find(x=>x.id===w.of); return `<div class="hint warr-note"><span class="pill appr">Warranty</span> No charge to the customer${o?` \u00b7 redo of ${o.number?"#"+esc(o.number):"visit"} from ${esc(o.date||"")}`:""}${w.note?` \u00b7 ${esc(w.note)}`:""}</div>`; })():""}
         ${l[5]?`<div class="hint" style="margin:8px 12px 0"><span class="pill red">Customer declined</span> <button class="linkbtn" data-undecl="${li}" type="button">Put back on the estimate</button></div>`:""}
         <div class="jbody"><div class="jmain">
         <div class="jsec lab"><div class="jsub">Labor</div>${labRow(l,li,true)}${kids.map(([c,ci])=>labRow(c,ci,false)).join("")}</div>
@@ -5660,7 +5738,7 @@
             <div class="card-head"><h2>Jobs</h2><span class="spacer"></span>
               <span class="muted" style="font-size:12px" id="rateLbl">${j.rate?"Custom rate":isTesla(j.make)?"Tesla rate":"Standard rate"}</span>
               <span class="muted" style="font-size:12px">$/hr</span><input id="wRate" class="mono" inputmode="decimal" value="${t.rate}" style="width:84px;text-align:right"></div>
-            ${jobsHTML(j,t)}
+            ${laterHTML(j)}${jobsHTML(j,t)}
             <div class="row" style="margin-top:4px"><button class="btn ghost sm" id="addLabor" type="button">+ Add job</button>
               <span class="hint" style="margin:0">A line only counts once it has a description. Bill hrs go on the customer's estimate; tech hrs are what you quote the technician (blank = same); flat $ sets a fixed price. Tax stays on the full parts price.</span></div>
           </div>
@@ -5792,6 +5870,29 @@
       $("#wRate").addEventListener("input",()=>{ const r=parseFloat($("#wRate").value); j.rate=(!isNaN(r)&&r!==defaultRate($("#vMake").value))?r:null; live(); });
       $("#view").querySelectorAll("[data-l],[data-p],[data-d]").forEach(e=>e.addEventListener(e.tagName==="SELECT"?"change":"input",live));
       $("#view").querySelectorAll("[data-dd]").forEach(b=>b.onclick=()=>{ pull(); const d=j.discounts[+b.dataset.dd]; if(d&&d.diagWaive) j.noDiagWaive=true; j.discounts.splice(+b.dataset.dd,1); render(); });
+      $("#view").querySelectorAll("[data-warr]").forEach(b=>b.onclick=()=>{ pull(); const k=b.dataset.warr; askWarranty(j,k,w=>{ j.warranty=j.warranty||{}; if(w) j.warranty[k]=w; else delete j.warranty[k]; render(); toast(w?"Marked as warranty \u2014 no charge":"Warranty removed"); }); });
+      $("#view").querySelectorAll("[data-later]").forEach(b=>b.onclick=()=>{ pull(); const l=j.labor[+b.dataset.later]; if(!l) return; const key=l[4], g=jobGroups(j,true).find(x=>x.key===key), ttl=String(l[0]||"").trim()||(g&&g.title)||"This job";
+        modal(`<h2>Save this job for later?</h2><p class="muted" style="margin-top:0"><b>${esc(ttl)}</b>${g?" \u00b7 "+money(g.total):""} comes off this visit and is saved on the customer's vehicle. When they come back, it shows at the top of the Jobs so you can add it with one tap.</p>
+          <div class="row end"><button class="btn ghost" data-close type="button">Cancel</button><button class="btn" id="slOk" type="button">Save for later</button></div>`, root=>{
+          root.querySelector("#slOk").onclick=()=>{ closeModal();
+            const has=x=>String(x||"").trim();
+            const labs=j.labor.filter(x=>x===l||(x[6]&&x[6]===key&&has(x[0]))).map(x=>[...x]);
+            const parts=j.parts.filter(p=>p.jobKey===key&&has(p.desc)).map(p=>{ const c={...p}; delete c.declined; return c; });
+            const discs=(j.discounts||[]).filter(d=>d.applies===key&&discOn(d)&&!d.diagWaive&&!d.warranty).map(d=>{ const c={...d}; delete c._auto; delete c._k; return c; });
+            j.later=j.later||[]; j.later.push({id:lineId(),title:ttl,labor:labs,parts,discounts:discs,total:g?g.total:0,savedAt:Date.now(),by:me.id,usedOn:null});
+            j.labor=j.labor.filter(x=>x!==l&&!(x[6]&&x[6]===key)); j.parts=j.parts.filter(p=>p.jobKey!==key); j.discounts=(j.discounts||[]).filter(d=>d.applies!==key); if(j.warranty) delete j.warranty[key];
+            render(); toast("Saved for later \u2014 "+ttl); }; }); });
+      const latFind=v=>{ const [wid,eid]=String(v).split("|"); const src=wid===j.id?j:db.jobs.find(x=>x.id===wid); return {src, e:src&&(src.later||[]).find(e=>e.id===eid)}; };
+      $("#view").querySelectorAll("[data-lat-add]").forEach(b=>b.onclick=()=>{ pull(); const {src,e}=latFind(b.dataset.latAdd); if(!e) return;
+        const ok=(e.labor.find(l=>!l[6])||e.labor[0]||[])[4], nk=lineId();
+        e.labor.forEach(l=>{ const c=[...l]; c[5]=null; if(c[4]===ok){ c[4]=nk; c[6]=null; } else { c[4]=lineId(); c[6]=nk; } j.labor.push(c); });
+        e.parts.forEach(p=>{ const c={...p,lid:lineId(),jobKey:nk}; delete c.declined; j.parts.push(c); });
+        (e.discounts||[]).forEach(d=>{ j.discounts=j.discounts||[]; j.discounts.push({...d,applies:nk}); });
+        if(src===j) j.later=j.later.filter(x=>x!==e); else { e.usedOn=j.id; e.usedAt=Date.now(); save(); }
+        render(); toast("Added: "+e.title); });
+      $("#view").querySelectorAll("[data-lat-x]").forEach(b=>b.onclick=()=>{ pull(); const {src,e}=latFind(b.dataset.latX); if(!e) return;
+        modal(`<h2>Remove saved job?</h2><p class="muted" style="margin-top:0"><b>${esc(e.title)}</b> won't show up for this customer any more.</p><div class="row end"><button class="btn ghost" data-close type="button">Cancel</button><button class="btn" id="lxOk" type="button">Remove</button></div>`, root=>{
+          root.querySelector("#lxOk").onclick=()=>{ closeModal(); e.dismissed=Date.now(); if(src!==j) save(); render(); }; }); });
       $("#view").querySelectorAll("[data-undecl]").forEach(b=>b.onclick=()=>{ pull(); const l=j.labor[+b.dataset.undecl]; l[5]=null; j.labor.filter(c=>c[6]===l[4]).forEach(c=>{ c[5]=null; }); j.parts.filter(p=>p.jobKey===l[4]).forEach(p=>delete p.declined); render(); });
       $("#view").querySelectorAll("[data-crew]").forEach(e=>e.onchange=()=>e.parentElement.classList.toggle("on",e.checked));
       $("#wTech").onchange=()=>re();
