@@ -283,8 +283,8 @@
   .jht span{display:block;font-size:12.5px;opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .jhtot{font-size:15px;font-weight:700;white-space:nowrap}
   .jacts{display:flex;gap:6px;flex-wrap:wrap}
-  .jact{background:transparent;color:inherit;border:1px solid rgba(255,255,255,.45);padding:5px 9px;font:600 11px/1 Montserrat,sans-serif;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;border-radius:0}
-  .jact:hover{border-color:#fff}.jact.on{background:#C8201F;border-color:#C8201F;color:#fff}
+  .jact{background:var(--paper,#fff);color:var(--ink,#000);border:1px solid var(--paper,#fff);padding:5px 9px;font:600 11px/1 Montserrat,sans-serif;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;border-radius:0}
+  .jact:hover{opacity:.85}.jact.on{background:#C8201F;border-color:#fff;color:#fff}
   .warr-note{margin:8px 12px 0}
   .later-box{border:2px solid var(--ink);margin-bottom:14px}
   .later-h{background:var(--ink);color:var(--paper,#fff);padding:9px 12px;display:flex;flex-direction:column}.later-h b{font-size:12px;letter-spacing:.12em;text-transform:uppercase}.later-h span{font-size:12.5px;opacity:.8}
@@ -4137,7 +4137,7 @@
       ${j.status==="estimate"?"":`<div class="pay-steps">${stepBtns(j)}</div>`}
       ${fees?`<div class="hint">Card fees collected earlier: ${money(fees)} (not part of the balance).</div>`:""}
       <button id="payAdd" type="button" hidden></button>
-      ${bal>0.004&&!j.done&&can("pay")?`<button class="btn ghost dep-btn" id="payDep" type="button"><span>Take a deposit</span><small>Any time \u2014 no worksheet needed</small></button>`:""}
+      ${bal>0.004&&!j.done&&can("pay")?`<button class="btn dark dep-btn" id="payDep" type="button">Take a deposit</button>`:""}
       ${bal>0.004&&j.status!=="estimate"?`<button class="btn start sq-btn" id="payTake" type="button" ${custNotified(j)?"":'disabled aria-disabled="true"'}>${bal>0.004?'<span class="stepno">3</span>':""}<span>Take payment</span><b class="mono">${money(bal)}</b></button>${custNotified(j)?"":`<div class="hint step-hint">${wsSeen(j)?"Notify the customer first.":"Open the technician worksheet, then notify the customer, first."}</div>`}`:""}
       ${pays.length?`<button class="btn ghost" id="payPrint" type="button" style="width:100%;margin-top:10px">Print receipt</button>`:""}`;
   }
