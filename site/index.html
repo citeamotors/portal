@@ -2337,7 +2337,6 @@
       ${tabT==="pre"?stageBar("__pre","Pre-repair inspection",preOK)+preHTML(d,dis,j)+wsInspHTML(d,dis,j,"pre")+`<div class="tjd-next"><button class="btn ghost" data-tjt="rep" type="button">Go to repair \u203a</button></div>`
       :tabT==="post"?stageBar("__post","Post-repair test drive",postOK)+wsInspHTML(d,dis,j,"post")+`
       <div class="card"><div class="two"><div><label style="margin-top:0">Out odometer <span class="muted" style="text-transform:none;letter-spacing:0">(required)</span></label>${odoBox(`id="wsOdo" class="mono ${odoOK?"fld-ok":"fld-need"}" placeholder="Mileage when done" ${dis}`,d.odo||(isKm(j.mileage)?" km":""))}</div><div></div></div>
-        <label>Tech notes</label><textarea id="wsNotes" rows="4" placeholder="Anything the office should know" ${dis}>${esc(d.notes||"")}</textarea>
         <div class="muted" style="font-size:12px;margin-top:6px" id="wsStamp">Saves automatically.</div>
         ${can&&!j.done?(!allDone?`<div class="tjd-left">Finish every repair on the Repair tab before closing out the car.</div>`:missing.length?`<div class="tjd-left">Still needed before the car is finished: <b>${esc(missing.join(", "))}</b>.${!preOK?` <button class="btn ghost sm" data-tjt="pre" type="button" style="margin-top:8px">Open pre-repair</button>`:""}</div>`:`<button class="btn finish tjd-carfin" id="tjFinish" type="button">\u2713 Car is finished</button>`):""}</div>`:`
       <div class="card tjd">
@@ -2370,6 +2369,8 @@
         </div>`; }).join("")+`<div class="labor-total tjob-tot"><span>${me.role==="manager"?"Tech hours":"Your hours"}</span><span>${techHrs(j).toFixed(2)} hrs</span></div>`
         :`<div class="muted">${esc(j.title||"No repair lines yet.")}</div>`}
         ${j.notes?`<div class="job-notes" style="margin-top:10px">${esc(j.notes)}</div>`:""}
+        <label>Tech notes</label><textarea id="wsNotes" rows="4" placeholder="Anything the office should know" ${dis}>${esc(d.notes||"")}</textarea>
+        <div class="muted" style="font-size:12px;margin-top:6px">Saves automatically.</div>
         ${can&&!j.done&&allDone?`<div class="tjd-next" style="margin-top:12px"><button class="btn" data-tjt="post" type="button">All repairs done \u2014 go to post-repair \u203a</button></div>`:""}
       </div>
       `:""}`}
