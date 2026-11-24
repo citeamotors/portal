@@ -65,6 +65,16 @@
   .ln span:last-child{font-family:var(--mono);white-space:nowrap}
   .ln small{display:block;color:var(--steel);font-size:11.5px}
   .inv-tn .tn{white-space:pre-wrap;padding:10px 12px;font-size:13.5px;line-height:1.5}
+  .ins .ins-h{font-size:13px;letter-spacing:.12em;text-transform:uppercase;margin:4px 0 6px}.ins .ins-h~.ins-h{margin-top:18px}
+  .ins-g{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);margin:12px 0 2px;font-weight:700}
+  .ins-row{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--hairline);font-size:14px}
+  .ins-l{min-width:0}.ins-l small{display:block;color:var(--steel);font-size:12.5px;margin-top:2px;white-space:pre-wrap}
+  .ins-r{flex:none;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;color:#fff;background:#686868}
+  .ins-r.r-ok{background:#1F8A4C}.ins-r.r-watch{background:#C99A06}.ins-r.r-repair{background:#C8201F}
+  .ins-p{font-size:13.5px;color:var(--steel);margin:4px 0 8px}
+  .rc-ins{margin-top:14px}.rc-ins .band{margin-top:10px}.rc-ins .ins-row{font-size:12.5px;padding:5px 10px}.rc-ins .ins-g{padding:0 10px}.rc-ins .ins-p{padding:0 10px}
+  .rc-card .band{display:none}.rc-card .rc-pre{margin:0;padding:0;border:0}.rc-card p,.rc-card li{margin:0;font-size:14.5px;line-height:1.5}
+  .tn-txt{white-space:pre-wrap;font-size:14.5px;line-height:1.5}
   .jnotes{white-space:pre-wrap;font-size:13.5px;padding:8px 10px;margin:4px 0 6px;border-left:3px solid var(--hairline);background:rgba(127,127,127,.08)}
   .jnotes b{display:block;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);margin-bottom:2px}
   .inv-note{white-space:pre-wrap;font-size:12px;margin:6px 0 4px;padding:6px 8px;border:1px solid #ccc}
@@ -441,6 +451,37 @@
   // the printable invoice, laid out like the shop's invoice
   // condition when the shop received the car (pre-repair inspection and test drive), for the receipt
   const PRE_LABELS={pdash:"Warning lights on the dash",pstart:"Starts and idles normally",pengine:"Engine power and acceleration",ptrans:"Transmission shifting",pbrakes:"Brakes (pedal feel, noise)",psteer:"Steering, pulls to one side",psusp:"Suspension noise over bumps and in turns",pvib:"Vibration at speed",phvac:"A/C and heat",pnoise:"Other noises or smells",pbody:"Body damage (dents, scratches, curb rash)",pglass:"Glass and windshield chips",pint:"Interior condition",pfuel:"Fuel or charge level"};
+  // inspection checklist labels (copied from the team portal when it publishes this page)
+  const WS_GROUPS=[
+    ["Fluids & engine",[["oil","Engine oil level & condition"],["coolant","Coolant level & condition"],["brakefl","Brake fluid"],["obd","OBD-II scan (list every code)"],["dash","Dash warning lights"]]],
+    ["Brakes, tires & suspension",[["fbrake","Front brakes (pads / rotors)"],["rbrake","Rear brakes (pads / rotors / shoes)"],["tires","Tire tread & condition"],["tpress","Tire pressure"],["susp","Suspension & steering parts"]]],
+    ["Leaks, hardware, battery & alignment",[["leaks","Leaks (oil, coolant, trans, steering)"],["belts","Belts & hoses"],["battery","Battery & terminals"],["align","Alignment / tire wear pattern"]]],
+    ["Test drive: noise, steering & handling",[["noise","Noises"],["steer","Steering play"],["tdsusp","Suspension"],["tdalign","Alignment (pull / wheel off center)"],["tdbrake","Brakes"],["trans","Transmission shifting"],["engine","Engine performance"],["vib","Vibration"],["ac","A/C cooling & blower"]]]
+  ];
+  const WS_GROUPS_EV=[
+    ["High voltage & battery",[["evsoc","HV battery: charge level & range (note % and miles)"],["evhealth","HV battery health / warnings in the car's service menu"],["evcharge","Charge port, door & charging test (note kW)"],["evcable","HV cables, orange connectors & battery case (underbody damage)"],["evcool","Battery / motor coolant level"],["battery","12V (low-voltage) battery & terminals"],["obd","Diagnostic scan of all modules (list every code)"],["dash","Dash / touchscreen warnings & alerts"]]],
+    ["Brakes, tires & suspension",[["fbrake","Front brakes (pads / rotors / caliper slides)"],["rbrake","Rear brakes (rust, seized calipers, parking brake)"],["brakefl","Brake fluid"],["tires","Tire tread & condition (inner edges)"],["tpress","Tire pressure"],["susp","Suspension, steering & control arm bushings"],["align","Alignment / tire wear pattern"]]],
+    ["Body, cabin & underbody",[["evleaks","Leaks (coolant, gear oil, A/C)"],["evshield","Underbody shields & aero panels"],["cabfilt","Cabin air filter"],["wipers","Wipers & washer fluid"],["lights","Exterior lights"],["evcam","Cameras & parking sensors"]]],
+    ["Test drive: noise, steering & handling",[["noise","Noises (clunks, rattles)"],["evmotor","Drive unit / motor whine or hum"],["steer","Steering play"],["tdsusp","Suspension"],["tdalign","Alignment (pull / wheel off center)"],["tdbrake","Brakes"],["evregen","Regenerative braking"],["evpower","Acceleration & power delivery"],["vib","Vibration"],["ac","A/C cooling & blower"],["evheat","Heat pump / cabin heat"]]]
+  ];
+  const EV_MAKE=/^(tesla|rivian|lucid|polestar|fisker)/i;
+  const EV_MODEL=/(\bev\b|\bev[369]\b|electric|e-?tron|\bleaf\b|\bbolt\b|ioniq ?[56]|mach-?e|lightning|\bid\.? ?[47]\b|taycan|\beq[a-z]{1,2}\b|\bi[347x]\b|\bix\b|ariya|bz4x|solterra|prologue|lyriq|hummer|recharge|\bc40\b|\bzdx\b|\bi-pace\b)/i;
+  const isEV=j=>!!(j&&(EV_MAKE.test(String(j.make||""))||EV_MODEL.test(String(j.model||""))||/electric|\bkwh\b|\bev\b/i.test(String(j.engine||""))));
+  const isDriveG=g=>/test drive|drive test/i.test(g);
+  const R_LBL={ok:"OK",watch:"Watch",repair:"Needs repair",na:"N/A"};
+  // the general inspection and the post-repair test drive, as the technician recorded them
+  function inspHTML(d,forPrint){ const I=d.inspection; if(!I) return "";
+    const s=d.snapshot||{}, it=I.items||{}, gs=isEV(s)?WS_GROUPS_EV:WS_GROUPS;
+    const rows=items=>items.filter(([k])=>it[k]&&it[k].r).map(([k,l])=>{ const x=it[k]; return `<div class="ins-row"><span class="ins-l">${esc(l)}${x.f?`<small>${esc(x.f)}</small>`:""}</span><span class="ins-r r-${esc(x.r)}">${esc(R_LBL[x.r]||x.r)}</span></div>`; }).join("");
+    const part=(drive)=>gs.filter(([g])=>isDriveG(g)===drive).map(([g,items])=>{ const r=rows(items); return r?`<div class="ins-g">${esc(g)}</div>${r}`:""; }).join("");
+    const pre=part(false), post=I.no_drive?`<p class="ins-p">The vehicle was not drivable, so no post-repair test drive was possible.</p>`:part(true);
+    if(!pre&&!post) return "";
+    const flagged=Object.values(it).filter(x=>x&&(x.r==="watch"||x.r==="repair")).length;
+    const head=t=>forPrint?`<div class="band">${t}</div>`:`<h3 class="ins-h">${t}</h3>`;
+    const body=`${pre?head("Vehicle inspection")+(flagged?`<p class="ins-p">${flagged} item${flagged>1?"s":""} to keep an eye on or repair are marked below.</p>`:"")+pre:""}${post?head("Post-repair test drive")+post:""}`;
+    return forPrint?`<div class="rc-ins">${body}</div>`:`<h2>Inspection</h2><section><div class="card ins">${body}</div></section>`; }
+  const notesHTML=d=>d.tech_notes?`<h2>Technician notes</h2><section><div class="card"><div class="tn-txt">${esc(d.tech_notes)}</div></div></section>`:"";
+  const preCardHTML=d=>{ const h=preRcHTML(d.pre); return h?`<h2>When we received it</h2><section><div class="card rc-card">${h}</div></section>`:""; };
   function preRcHTML(p){ if(!p||!p.drivable) return "";
     const when=p.at?" on "+fmtDay(new Date(p.at).toISOString()):"";
     if(p.drivable==="no") return `<div class="rc-pre"><div class="band">Condition when we received your vehicle</div><p>The vehicle was not drivable when we received it${esc(when)}, so no test drive was possible.${p.why?" "+esc(p.why):""}</p></div>`;
@@ -496,7 +537,7 @@
   function receiptHTML(d){
     const s=d.snapshot||{}, done=d.stage==="invoice", ap=d.approval, pct=Number((d.pay||{}).cash_discount_pct||0);
     const ph=(d.photos||[]).slice(0,12);
-    const extra=`${preRcHTML(d.pre)}${ap?`<div class="rc-appr">Estimate approved and signed${ap.signer?" by "+esc(ap.signer):""}${ap.at?" on "+esc(fmtWhen(ap.at)):""}.</div>`:""}
+    const extra=`${preRcHTML(d.pre)}${inspHTML(d,true)}${ap?`<div class="rc-appr">Estimate approved and signed${ap.signer?" by "+esc(ap.signer):""}${ap.at?" on "+esc(fmtWhen(ap.at)):""}.</div>`:""}
       ${ph.length?`<div class="rc-ph"><div class="band">Photos of your vehicle</div><div class="rc-gal">${ph.map(u=>`<img src="${esc(u)}" alt="">`).join("")}</div></div>`:""}
 `;
     return invoiceHTML(d,{id:"receiptDoc",title:done?"Invoice":"Estimate",extra,fine:(done?INV_FINE:TERMS_TXT+" "+FINE_PRINT)+" Questions? Call or text (702) 907-2107."});
@@ -573,6 +614,7 @@
       <section><div class="card" style="padding:0;overflow:hidden">${invoiceHTML(d)}</div>
         <button class="btn ghost printbtn" id="printInv" type="button">Save receipt as PDF or print</button></section>
       ${bal<=0.004?payHTML(d,bal):""}
+      ${preCardHTML(d)}${inspHTML(d)}
       ${photosHTML(d)}
 
       ${footer}`;
@@ -589,6 +631,7 @@
           ${ap?`<div><b>Approved</b>${esc(fmtWhen(ap.at))}${ap.signer?" by "+esc(ap.signer):""}</div>`:""}
         </div></div></section>
       ${workHTML}
+      ${notesHTML(d)}${preCardHTML(d)}${inspHTML(d)}
       ${photosHTML(d)}
       <h2>Approved estimate</h2>
       <section><button class="btn ghost printbtn" id="printInv" type="button" style="margin-top:0">Save a copy as PDF or print</button></section>
