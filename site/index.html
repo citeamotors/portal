@@ -1224,7 +1224,13 @@
     const x=extraRows(); for(const t in x){ snap[t]=new Map(x[t].map(r=>[PK[t](r),JSON.stringify(r)])); }
   }
   // vehicle rows carry the main car photo as a picture (most of the data). Log in without them, then fill them in.
-  const VEH_COLS_NO_PHOTO=()=>Object.values(SPEC.vehicles.map).filter(c=>c!=="photo").concat(["extra"]).join(",");
+  const VEH_COLS_NO_PHOTO=()=>Object.values(SPEC.vehicles.map).filter(c=>c!=="photo").concat(["extra:extra_lite"]).join(",");
+  const EST_COLS="id,token,wo_id,snapshot,status,signer_name,approved_total,decided_at,ip,user_agent,seen_at,created_by,created_at,expires_at,content_hash,approved_jobs,declined_jobs,evidence,doc_hash,superseded_at";
+  const sigCache={};
+  new MutationObserver(()=>{ document.querySelectorAll("img[data-sigid]:not([src])").forEach(async im=>{ const id=im.dataset.sigid; im.src="data:image/gif;base64,R0lGODlhAQABAAAAACw=";
+    try{ if(sigCache[id]===undefined){ const {data}=await sb.from("estimate_requests").select("signature").eq("id",id).maybeSingle(); sigCache[id]=(data&&data.signature)||""; }
+      if(sigCache[id]) im.src=sigCache[id]; else { const l=im.previousElementSibling; if(l&&l.tagName==="LABEL") l.remove(); im.remove(); } }catch(e){} }); }).observe(document.documentElement,{childList:true,subtree:true});
+  const sigTag=r=>r.signature?`<img src="${r.signature}" alt="Signature" class="sig-img">`:r.status==="approved"?`<img data-sigid="${esc(r.id)}" alt="Signature" class="sig-img">`:"";
   async function loadAll(){
     // everything at once (one round trip instead of a dozen one after another)
     const safe=(p,fb)=>p.catch(()=>fb);
@@ -1240,7 +1246,7 @@
     const none=Promise.resolve(null);
     const [pc, est, pay, punch, wsr, links, pays, qbo, woc, deals, pins]=await Promise.all([
       mgrLoad?fetchAll("part_costs"):Promise.resolve([]),
-      safe(fetchAll("estimate_requests"),[]), safe(fetchAll("team_pay"),[]), safe(fetchAll("punch_edits"),null), safe(fetchAll("worksheets"),[]),
+      safe(fetchAll("estimate_requests",EST_COLS),[]), safe(fetchAll("team_pay"),[]), safe(fetchAll("punch_edits"),null), safe(fetchAll("worksheets"),[]),
       mgrLoad?safe(fetchAll("customer_links"),[]):none, mgrLoad?safe(fetchAll("payments"),[]):none, mgrLoad?safe(fetchAll("qbo_links"),[]):none, mgrLoad?safe(fetchAll("wo_costs"),[]):none,
       owner?safe(fetchAll("car_deals"),null):none, owner?safe(fetchAll("team_pins"),[]):none]);
     if(mgrLoad){ const m=Object.fromEntries((pc||[]).map(r=>[r.part_id,Number(r.cost)])); d.inventory.forEach(p=>{ if(m[p.id]!==undefined) p.cost=m[p.id]; }); }
@@ -1260,10 +1266,11 @@
   // car photos arrive a moment after login; they don't count as changes made on this device
   async function loadVehiclePhotos(){
     try{
-      const rows=await fetchAll("vehicles","id,photo"); if(!db||!db.vehicles) return;
+      const rows=await fetchAll("vehicles","id,photo,kp:extra->>keyPhoto"); if(!db||!db.vehicles) return;
       const sv=snap.vehicles||new Map(), cur=new Map(rowsOf("vehicles").map(r=>[r.id,JSON.stringify(r)]));
       const byId=new Map(db.vehicles.map(v=>[v.id,v]));
-      rows.forEach(r=>{ const v=byId.get(r.id); if(!v||v.photo!==undefined) return; const clean=sv.get(r.id)===cur.get(r.id); v.photo=r.photo;
+      rows.forEach(r=>{ const v=byId.get(r.id); if(!v||(v.photo!==undefined&&v.keyPhoto!==undefined)) return; const clean=sv.get(r.id)===cur.get(r.id);
+        if(v.photo===undefined&&r.photo!=null) v.photo=r.photo; if(v.keyPhoto===undefined&&r.kp!=null) v.keyPhoto=r.kp;
         if(clean){ const nr=rowsOf("vehicles").find(x=>x.id===r.id); if(nr) sv.set(r.id,JSON.stringify(nr)); } });
       scheduleRender();
     }catch(e){}
@@ -1420,6 +1427,7 @@
     const k=TABLE_KEY[t]; if(!k) return; const arr=db[k];
     if(ev==="DELETE"){ const i=arr.findIndex(o=>o.id===od.id); if(i>=0) arr.splice(i,1); snap[k]&&snap[k].delete(od.id); return scheduleRender(); }
     const o=fromRow(k,nw), i=arr.findIndex(x=>x.id===o.id);
+    if(pl.lite&&i>=0){ if(o.photo===undefined&&arr[i].photo!==undefined) o.photo=arr[i].photo; if(o.keyPhoto===undefined&&arr[i].keyPhoto!==undefined) o.keyPhoto=arr[i].keyPhoto; }   // photos aren't in a light reload
     if(k==="inventory"&&i>=0&&arr[i].cost!==undefined) o.cost=arr[i].cost;
     const j=JSON.stringify(toRow(k,o)); if(snap[k]&&snap[k].get(o.id)===j) return;
     { const cj=rowSig(toRow(k,o)), sj=snap[k]&&snap[k].has(o.id)?rowSig(JSON.parse(snap[k].get(o.id))):null;
@@ -1452,12 +1460,12 @@
       await flushPush();
       if(!sessionDead&&push.failed) await push();
       if(sessionDead||push.failed) return;   // keep this device's unsaved changes on screen; try again later
-      const rows=await Promise.all(ORDER.map(k=>fetchAll(SPEC[k].table)));
+      const rows=await Promise.all(ORDER.map(k=>k==="vehicles"?fetchAll("vehicles",VEH_COLS_NO_PHOTO()):fetchAll(SPEC[k].table)));
       ORDER.forEach((k,i)=>{ const tb=SPEC[k].table, ids=new Set(rows[i].map(r=>r.id));
-        rows[i].forEach(r=>applyRemote({table:tb,eventType:"UPDATE",new:r}));
+        rows[i].forEach(r=>applyRemote({table:tb,eventType:"UPDATE",new:r,lite:k==="vehicles"}));
         [...((snap[k]||new Map()).keys())].filter(id=>!ids.has(id)).forEach(id=>applyRemote({table:tb,eventType:"DELETE",old:{id}})); });
       try{ (await fetchAll("worksheets")).forEach(r=>{ const cur=(db.worksheets||{})[r.wo_id]; if(!cur||canonJ(cur.data)!==canonJ(r.data)) applyRemote({table:"worksheets",eventType:"UPDATE",new:r}); }); }catch(e){}
-      try{ db.estimates=await fetchAll("estimate_requests"); }catch(e){}
+      try{ db.estimates=await fetchAll("estimate_requests",EST_COLS); }catch(e){}
       if(me.role==="manager"){
         try{ db.payments=await fetchAll("payments"); }catch(e){}
         try{ const m={}; (await fetchAll("customer_links")).forEach(r=>{ m[r.wo_id]=r; }); db.custLinks=m; }catch(e){}
@@ -4290,7 +4298,7 @@
     const la=lastApproval(j), stale=la&&!validApproval(j);
     const staleNote=stale?`<span class="pill red">New estimate not approved</span><p style="margin:10px 0 0">The price went up from <b class="mono">${money(Number(la.approved_total||0))}</b> (approved ${when(la.decided_at)}) to <b class="mono">${money(woTotals(j).total)}</b>. The customer needs to approve the new estimate.</p>`:"";
     const body = r.status==="approved" ? (stale?staleNote:`<span class="pill green">${dec?"Partly approved":"Approved"}</span><p style="margin:10px 0 4px">Signed by <b>${esc(r.signer_name||"")}</b> \u00b7 ${when(r.decided_at)}</p>
-        <p class="muted" style="margin:0 0 6px">Approved total <b class="mono">${money(Number(r.approved_total||0))}</b>${dec?` \u00b7 declined ${dec} of ${jobsN} jobs`:""}</p>${r.signature?`<img src="${r.signature}" alt="Signature" class="sig-img">`:""}
+        <p class="muted" style="margin:0 0 6px">Approved total <b class="mono">${money(Number(r.approved_total||0))}</b>${dec?` \u00b7 declined ${dec} of ${jobsN} jobs`:""}</p>${sigTag(r)}
         <button class="btn ghost sm" data-rec="${r.id}" type="button" style="margin-top:8px">View signed record</button>`)
       : r.status==="declined" ? `<span class="pill red">Declined</span><p style="margin:10px 0 0">${esc(r.signer_name||"Customer")} declined \u00b7 ${when(r.decided_at)}</p><button class="btn ghost sm" data-rec="${r.id}" type="button" style="margin-top:8px">View record</button>`
       : r.status==="cancelled" ? `<span class="pill red">${stale?"New estimate not approved":"Not approved"}</span><p class="muted" style="margin:10px 0 0">The price changed after the last link was sent. Click Send for approval to text the customer the new price.</p>`
@@ -4314,7 +4322,7 @@
       <table class="lines">${(s.jobs||[]).map(x=>`<tr><td>${esc(x.title)}</td><td class="num mono">${money(x.total)}</td><td>${r.status!=="approved"?'<span class="pill red">Declined</span>':ok.has(x.key)?'<span class="pill green">Approved</span>':'<span class="pill red">Declined</span>'}</td></tr>`).join("") || `<tr><td>${esc(s.title)}</td><td class="num mono">${money(s.total)}</td><td></td></tr>`}
       ${s.whole_discount?`<tr><td>Discount</td><td class="num mono">\u2212${money(s.whole_discount)}</td><td></td></tr>`:""}
       <tr><td><b>Total authorized</b></td><td class="num mono"><b>${money(Number(r.approved_total||0))}</b></td><td></td></tr></table>
-      ${r.signature?`<label>Signature</label><img src="${r.signature}" alt="Signature" class="sig-img">`:""}
+      ${r.signature||r.status==="approved"?`<label>Signature</label>${sigTag(r)}`:""}
       <table style="margin-top:12px;font-size:12.5px">
         ${row("Typed name",esc(r.signer_name||""))}
         ${row("Signed (server time)",esc(whenStr(r.decided_at)))}
@@ -4870,8 +4878,8 @@
     return out;
   }
   // ---- Citea VIN scanner: live camera auto-detect, barcode + on-device text reading, check-digit verified ----
-  // Files live in Supabase storage (deploy/portal/vin/). The older reader below stays as a fallback.
-  const VS_BASE="https://asobgojrhatjpazgwnjp.supabase.co/storage/v1/object/public/deploy/portal/vin/";
+  // Files live with the site (m/vin/, m/sort/). The older reader below stays as a fallback.
+  const VS_BASE=new URL("m/vin/",location.href).href;   // served with the site (moved off database storage to save bandwidth)
   let vsP=null;
   function loadVinScanner(){
     if(window.VinScanner&&window.VinScanner.open) return Promise.resolve(window.VinScanner);
@@ -5081,7 +5089,7 @@
     data.items=data.items||{}; data.labor=data.labor||{}; data.photos=data.photos||[];
     for(const f of files){
       const blob=await dataUrlToBlob(await shrinkImage(f,1280)), path=`${woId}/${uid()}.jpg`;
-      const {error}=await sb.storage.from("ws-photos").upload(path,blob,{contentType:"image/jpeg"}); if(error) throw error;
+      const {error}=await sb.storage.from("ws-photos").upload(path,blob,{contentType:"image/jpeg",cacheControl:"31536000"}); if(error) throw error;
       data.photos.push({path,kind:"before",by:me.id,at:Date.now()});
     }
     const live=db.jobs.find(x=>x.id===woId);
@@ -5447,7 +5455,7 @@
   }
   async function fillGallery(){
     const imgs=[...document.querySelectorAll("img[data-wsp]")], need=imgs.map(i=>i.dataset.wsp).filter(p=>!wsSignedUrls[p]);
-    if(need.length){ const {data}=await sb.storage.from("ws-photos").createSignedUrls([...new Set(need)],3600); (data||[]).forEach(x=>{ if(x.signedUrl) wsSignedUrls[x.path]=x.signedUrl; }); }
+    if(need.length){ const {data}=await sb.storage.from("ws-photos").createSignedUrls([...new Set(need)],PH_TTL); (data||[]).forEach(x=>{ if(x.signedUrl) wsSignedUrls[x.path]=x.signedUrl; }); rememberLinks(data||[]); }
     imgs.forEach(i=>{ if(wsSignedUrls[i.dataset.wsp]) i.src=wsSignedUrls[i.dataset.wsp]; });
   }
   // shrink a phone photo so it fits comfortably in browser storage
@@ -5966,6 +5974,11 @@
       <div class="row" style="margin-top:10px;gap:8px"><button class="btn ghost sm" id="wsOpen" type="button">Open worksheet</button></div></div>`;
   }
   let wsSaveT=null, wsData=null, wsSignedUrls={};
+  // photo links are kept for a week on this device: the same link lets the phone reuse the photo instead of downloading it again
+  const PH_KEY="citea-ph-links", PH_TTL=7*24*3600;
+  try{ const c=JSON.parse(localStorage.getItem(PH_KEY)||"{}"), now=Date.now(); for(const k in c) if(c[k].e>now+3600e3) wsSignedUrls[k]=c[k].u; }catch(e){}
+  function rememberLinks(list){ try{ const c=JSON.parse(localStorage.getItem(PH_KEY)||"{}"), now=Date.now(); for(const k in c) if(c[k].e<now) delete c[k];
+    list.forEach(x=>{ if(x.signedUrl) c[x.path]={u:x.signedUrl,e:now+PH_TTL*1000}; }); localStorage.setItem(PH_KEY,JSON.stringify(c)); }catch(e){} }
   function wsRemote(row){
     if(!wsData||wsOpenId!==row.wo_id) return;
     const typing=document.activeElement&&document.activeElement.closest&&document.activeElement.closest(".ws")&&/INPUT|TEXTAREA/.test(document.activeElement.tagName);
@@ -6136,7 +6149,7 @@
   }
   async function wsLoadThumbs(){
     const els=[...document.querySelectorAll("[data-wsthumb]")], need=els.map(e=>e.dataset.wsthumb).filter(p=>!wsSignedUrls[p]);
-    if(need.length){ const {data}=await sb.storage.from("ws-photos").createSignedUrls(need,3600); (data||[]).forEach(x=>{ if(x.signedUrl) wsSignedUrls[x.path]=x.signedUrl; }); }
+    if(need.length){ const {data}=await sb.storage.from("ws-photos").createSignedUrls(need,PH_TTL); (data||[]).forEach(x=>{ if(x.signedUrl) wsSignedUrls[x.path]=x.signedUrl; }); rememberLinks(data||[]); }
     els.forEach(e=>{ const u=wsSignedUrls[e.dataset.wsthumb]; if(u){ e.src=u; e.parentElement.href=u; } });
   }
   async function wsAddPhoto(j,file,kind){
@@ -6144,7 +6157,7 @@
     try{
       const blob=await dataUrlToBlob(await shrinkImage(file,1280));
       const path=`${j.id}/${uid()}.jpg`;
-      const {error}=await sb.storage.from("ws-photos").upload(path,blob,{contentType:"image/jpeg"});
+      const {error}=await sb.storage.from("ws-photos").upload(path,blob,{contentType:"image/jpeg",cacheControl:"31536000"});
       if(error) throw error;
       wsData.photos.push({path,kind,by:me.id,at:Date.now()}); wsSave(true); renderWorksheetKeep();
     }catch(e){ toast("Couldn't upload: "+(e.message||e)); }
