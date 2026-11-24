@@ -96,6 +96,7 @@
   .sighint{position:absolute;inset:0;display:grid;place-items:center;color:#b5b5b2;font-size:14px;pointer-events:none}
   .clear{position:absolute;right:8px;top:8px;border:1px solid var(--hairline);background:var(--surface);font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;padding:6px 9px;cursor:pointer}
   .terms{font-size:12.5px;line-height:1.55;color:var(--graphite);margin-top:14px}
+  .free-note{margin:0 0 4px;padding:12px 14px;border-left:4px solid #1F8A4C;background:rgba(31,138,76,.08);font-size:14.5px;line-height:1.45;color:#111;font-weight:600}
   .agree{display:flex;gap:10px;align-items:flex-start;margin-top:14px;font-size:13.5px;line-height:1.45;cursor:pointer;text-transform:none;letter-spacing:0;color:var(--ink);font-weight:500}
   .agree input{width:22px;height:22px;margin:0;flex:none;accent-color:var(--ink)}
   .cta{position:fixed;left:0;right:0;bottom:0;background:var(--black);color:#fff;padding:12px 16px calc(12px + env(safe-area-inset-bottom));z-index:5}
@@ -312,13 +313,14 @@
         ${jobs.length>1?`<div class="choice"><button class="ok" type="button" data-pick="${esc(x.key)}" data-v="1">Approve</button><button class="no" type="button" data-pick="${esc(x.key)}" data-v="0">Decline</button></div>`:""}</div>`).join("")}</section>
       <h2>Summary</h2>
       <section><div class="card sum" id="sum"></div></section>
-      <h2>Authorize &amp; sign</h2>
+      <h2 id="signH">Authorize &amp; sign</h2>
       <section><div class="card">
-        <label for="name" style="margin-top:0">Your full name <span class="req-tag" data-rq="name">Required</span></label><input type="text" id="name" class="req" autocomplete="off" autocapitalize="words" placeholder="${esc(s.customer||"First and last name")}">
+        <div id="signPart"><label for="name" style="margin-top:0">Your full name <span class="req-tag" data-rq="name">Required</span></label><input type="text" id="name" class="req" autocomplete="off" autocapitalize="words" placeholder="${esc(s.customer||"First and last name")}">
         <div class="name-hint" style="margin-top:8px;font-size:15px;line-height:1.4;font-weight:700;color:#111">Type your first and last name.</div>
         <label>Signature <span class="req-tag" data-rq="sig">Required</span></label>
         <div class="sigbox req" id="sigbox"><canvas id="sig"></canvas><div class="sigline"></div><div class="sigx">\u00d7</div>
-          <div class="sighint" id="sighint">Sign here with your finger</div><button class="clear" id="clear" type="button">Clear</button></div>
+          <div class="sighint" id="sighint">Sign here with your finger</div><button class="clear" id="clear" type="button">Clear</button></div></div>
+        <div class="free-note hidden" id="freeNote">There's no charge for this work, so no signature is needed. Please read and agree to the terms below.</div>
         <div class="terms">${TERMS_TXT}</div>
         <div style="font-size:14px;line-height:1.5;margin-top:14px;color:#111">See our full <a class="tlink" style="font-weight:600" href="https://www.citeamotors.com/" target="_blank" rel="noopener">policies and terms</a>.</div>
         <label class="agree req" id="agreeBox"><input type="checkbox" id="agree"> I've reviewed this estimate and agree to the terms above.</label>
@@ -332,7 +334,8 @@
         +((s.whole_discounts||[]).map(d=>`<div class="ln"><span>${esc(d.desc)}</span><span>\u2212${money(d.amount)}</span></div>`).join(""))
         +`<div class="ln tot"><span>Total approved</span><span>${money(tot)}</span></div>`
         +(declined.length&&any?`<div class="dec">You're declining ${declined.length} job${declined.length>1?"s":""}. We won't do ${declined.length>1?"them":"it"}.</div>`:"");
-      $("#ctaTot").textContent=money(tot); $("#go").textContent=any?"Approve & sign":"Decline all"; };
+      const free=any&&tot<=0; $("#signH").innerHTML=free?"Authorize":"Authorize &amp; sign"; $("#signPart").classList.toggle("hidden",free); $("#freeNote").classList.toggle("hidden",!free);
+      $("#ctaTot").textContent=money(tot); $("#go").textContent=free?"Agree & approve":any?"Approve & sign":"Decline all"; };
     $("#main").querySelectorAll("[data-pick]").forEach(b=>b.onclick=()=>{ const k=b.dataset.pick; pick[k]=b.dataset.v==="1"; const c=b.closest(".job"); c.classList.toggle("approved",pick[k]); c.classList.toggle("declined",!pick[k]); sum(); });
     sum(); $("#cta").classList.remove("hidden");
     const cv=$("#sig"), box=$("#sigbox"); let ctx, drawing=false, inked=false, last=null, strokes=0;
@@ -367,13 +370,14 @@
       const err=$("#err"), name=$("#name").value.trim();
       if(decision==="approved"&&!jobs.some(x=>pick[x.key])) decision="declined";
       if(decision==="approved"){
-        if(name.length<2){ err.textContent="Please type your name."; $("#name").focus(); return; }
-        if(!inked){ err.textContent="Please sign in the box."; box.scrollIntoView({behavior:"smooth",block:"center"}); return; }
+        const free=approvedTotal()<=0;
+        if(!free&&name.length<2){ err.textContent="Please type your name."; $("#name").focus(); return; }
+        if(!free&&!inked){ err.textContent="Please sign in the box."; box.scrollIntoView({behavior:"smooth",block:"center"}); return; }
         if(!$("#agree").checked){ err.textContent="Please check the box to agree."; return; }
       } else if(!(window.confirm?confirm("Decline this estimate? We won't do this work."):true)) return;
-      err.textContent=""; $("#go").disabled=true; $("#go").textContent=decision==="approved"?"Securing your signature\u2026":"Sending\u2026";
+      err.textContent=""; $("#go").disabled=true; $("#go").textContent=decision==="approved"?(approvedTotal()>0?"Securing your signature\u2026":"Sending\u2026"):"Sending\u2026";
       const ev=await evidence(decision);
-      const args={p_decision:decision,p_name:name,p_signature:decision==="approved"?sigData():"",
+      const args={p_decision:decision,p_name:name,p_signature:decision==="approved"&&approvedTotal()>0?sigData():"",
         p_jobs:legacy?null:jobs.filter(x=>pick[x.key]).map(x=>x.key),p_evidence:ev};
       if(sm&&decision==="approved"){ const so=$("#smsOk"); if(so&&so.checked!==!!sm.smsOk) await sb.rpc("set_text_updates",{p_token:sm.token,p_ok:so.checked}); }
       const {data,error}=sm ? await sb.rpc("decide_work",{...args,p_token:sm.token,p_doc_hash:docHash}) : await sb.rpc("decide_estimate",{...args,p_token:token});
@@ -575,7 +579,7 @@
       ${stepsHTML(d.status)}
       <div class="hello"><div class="eyebrow">Your repair</div><h1>Hi ${esc(s.first||"there")}</h1>
         <div class="muted" style="font-size:14px">${esc(s.vehicle||"Your vehicle")}${s.vin?`<div class="mono" style="font-size:13px;margin-top:2px;letter-spacing:.04em;word-break:break-all">VIN ${esc(String(s.vin))}</div>`:""}</div></div>
-      ${justDecided==="approved"?`<section><div class="card note">Thank you \u2014 we have your approval and signature. You'll get a text when your car is ready.</div></section>`:""}
+      ${justDecided==="approved"?`<section><div class="card note">Thank you \u2014 we have your approval. You'll get a text when your car is ready.</div></section>`:""}
       <section><div class="card">
         <div class="now">${esc(d.status==="waiting_parts"?(d.wait_reason==="customer"?"Waiting on you \u2014 we'll reach out":d.wait_reason==="parts"?"Waiting for parts":"Your repair is in progress"):(NOW_TEXT[d.status]||"In the shop"))}</div>
         <div class="facts">
