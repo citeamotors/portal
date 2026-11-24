@@ -400,7 +400,7 @@
   const STEPS=[["estimate","Estimate"],["approved","Approved"],["in_progress","In progress"],["completed","Ready"],["picked_up","Picked up"]];
   const STEP_OF={estimate:0,approved:1,in_progress:2,waiting_parts:2,completed:3,picked_up:4};
   const NOW_TEXT={estimate:"Your estimate is ready to review",approved:"Approved \u2014 your repair is in line",in_progress:"Your repair is in progress",
-    waiting_parts:"Waiting on parts",completed:"Ready for pickup",picked_up:"Picked up \u2014 thank you!"};
+    waiting_parts:"Waiting for parts",completed:"Ready for pickup",picked_up:"Picked up \u2014 thank you!"};
   const METHODS=[["cashzelle","Cash / Zelle"],["card","Debit / credit card"],["snap","Snap Finance"],["affirm","Affirm"]];
   const SHOP_ZELLE="(702) 907-2107";
   // financing partners: their official logo files (from each company's merchant kit) go next to this page as pay-snap.png / pay-affirm.png
@@ -577,7 +577,7 @@
         <div class="muted" style="font-size:14px">${esc(s.vehicle||"Your vehicle")}${s.vin?`<div class="mono" style="font-size:13px;margin-top:2px;letter-spacing:.04em;word-break:break-all">VIN ${esc(String(s.vin))}</div>`:""}</div></div>
       ${justDecided==="approved"?`<section><div class="card note">Thank you \u2014 we have your approval and signature. You'll get a text when your car is ready.</div></section>`:""}
       <section><div class="card">
-        <div class="now">${esc(NOW_TEXT[d.status]||"In the shop")}</div>
+        <div class="now">${esc(d.status==="waiting_parts"?(d.wait_reason==="customer"?"Waiting on you \u2014 we'll reach out":d.wait_reason==="parts"?"Waiting for parts":"Your repair is in progress"):(NOW_TEXT[d.status]||"In the shop"))}</div>
         <div class="facts">
           <div><b>Repair started</b>${d.started_ms?esc(fmtWhen(Number(d.started_ms))):"Not started yet"}</div>
           ${ap?`<div><b>Approved</b>${esc(fmtWhen(ap.at))}${ap.signer?" by "+esc(ap.signer):""}</div>`:""}

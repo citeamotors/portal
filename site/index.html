@@ -441,6 +441,8 @@
   .tjd-bar{position:sticky;top:var(--top);z-index:4;margin:-4px -2px 12px;padding:8px 2px;background:var(--paper)}
   .tjd-row{display:flex;align-items:center;gap:10px}
   .tjd-tabs.t3{grid-template-columns:1fr 1fr 1fr}
+  .wait-pause{width:100%;margin:0 0 14px;border-color:#C8201F;color:#C8201F}
+  .wait-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:14px;border-left:4px solid #C8201F}.wait-bar .stage-t{flex:1;display:flex;flex-direction:column}.wait-bar .stage-t span{font-size:13px;color:var(--steel,#686868)}
   .stage-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;margin-bottom:14px;border-left:4px solid #D9A400}
   .stage-bar.on{border-left-color:#16A34A}.stage-bar.done{border-left-color:#2E7D32}
   .stage-bar .stage-t{flex:1;min-width:0;display:flex;flex-direction:column}.stage-bar .stage-t span{font-size:13px;color:var(--steel,#686868)}
@@ -507,6 +509,10 @@
   .chip .c{font-family:var(--mono);margin-left:6px;opacity:.7}
   .kanban{display:grid;grid-template-columns:repeat(3,minmax(270px,1fr));gap:16px;overflow-x:auto;align-items:stretch;padding-bottom:6px}
   .kanban.four{grid-template-columns:repeat(4,minmax(260px,1fr))}
+  .kanban.five{grid-template-columns:repeat(5,minmax(240px,1fr))}
+  .khead.wait{border-top-color:#C8201F}
+  .wait-reasons{display:flex;flex-direction:column;gap:8px}.wait-reasons .btn{display:flex;flex-direction:column;align-items:center;gap:2px}.wait-reasons small{font-size:11.5px;font-weight:400;text-transform:none;letter-spacing:0;opacity:.75}
+  .wait-why{display:flex;align-items:center;gap:8px;margin-top:8px}
   .kcol{background:var(--sub);min-height:max(520px,calc(100vh - 300px))}
   .khead{display:flex;align-items:center;gap:8px;padding:12px 14px;background:var(--surface);border:1px solid var(--hairline);border-top:4px solid var(--ink);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.14em}
   .khead.est{border-top-color:#BDBDBA} .khead.done{border-top-color:var(--green)} .khead.closed{border-top-color:var(--hairline)}
@@ -889,7 +895,7 @@
     .stats .stat:nth-child(n+3){border-top:1px solid var(--hairline)}
     .stat b{font-size:20px}
     /* work in progress: columns stack instead of scrolling sideways */
-    .kanban,.kanban.four{grid-template-columns:1fr;overflow:visible}
+    .kanban,.kanban.four,.kanban.five{grid-template-columns:1fr;overflow:visible}
     .kcol{min-height:0}
     /* status steps wrap into a 3 x 2 grid */
     .stepper{display:grid;grid-template-columns:repeat(3,1fr);overflow:visible}
@@ -1360,8 +1366,8 @@
             if(!row){ if(i>=0) db.jobs.splice(i,1); old.delete(id); return; } const o=fromRow("jobs",row); if(i>=0){ const cur=db.jobs[i]; Object.keys(cur).forEach(x=>{ if(!(x in o)) delete cur[x]; }); Object.assign(cur,o); } else db.jobs.push(o);
             old.set(id,JSON.stringify(toRow("jobs",o))); scheduleRender(); }catch(e){ old.set(id,JSON.stringify(rowsOf("jobs").find(x=>x.id===id)||{})); } };
           for(const r of up){ let prev=null; try{ prev=JSON.parse(old.get(r.id)||"null"); }catch(e){}
-            if(prev&&prev.status===r.status){ await reload(r.id); continue; }
-            const {data,error}=await sb.rpc("tech_set_status",{p_id:r.id,p_status:r.status});
+            if(prev&&prev.status===r.status&&!(r.status==="waiting_parts"&&(prev.extra||{}).waitReason!==(r.extra||{}).waitReason)){ await reload(r.id); continue; }
+            const {data,error}=await sb.rpc("tech_set_status",{p_id:r.id,p_status:r.status,p_reason:r.status==="waiting_parts"?((r.extra||{}).waitReason||null):null});
             if(error||data&&data.error){ const why=error?error.message:data.error; logAct("action","Error: status "+r.status+" on #"+(r.number||r.id)+" refused ("+why+")"); await reload(r.id);
               if(!error&&data.error!=="not_found") toast(data.error==="locked_status"?"That job's status was changed by the office \u2014 refreshed.":"Only your manager can change that ("+why+")"); else if(error) failures.push(why); }
             else old.set(r.id,JSON.stringify(r)); }
@@ -1715,7 +1721,7 @@
     else toast("Started: "+(label||j.title));
     stopTask(me.id);
     db.jobTime.push({id:uid(),userId:me.id,jobId:j.id,lineKey:key||null,start:Date.now(),end:null});
-    if(isWO(j) && (j.status==="approved"||(j.status==="estimate"&&validApproval(j)))) setStatus(j,"in_progress");
+    if(isWO(j) && (j.status==="approved"||j.status==="waiting_parts"||(j.status==="estimate"&&validApproval(j)))) setStatus(j,"in_progress");
     save(); return true;
   }
   function toast(msg){ if(/couldn.t|not saved|error|failed/i.test(String(msg))) try{ logAct("action","Error: "+msg); }catch(e){} const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2200); }
@@ -2272,6 +2278,9 @@
     const odoOK=!!String(d.odo||"").replace(/\D/g,""), postN=postKeys.filter(rated).length+(odoOK?1:0), postT=postKeys.length+1, postOK=postN>=postT;
     const runK=k=>{ const r=runningTask(me.id); return !!(r&&r.jobId===j.id&&r.lineKey===k); };
     if(wo&&((runK("__pre")&&preOK)||(runK("__post")&&postOK))){ const st=stopTask(me.id); save(); toast((st.lineKey==="__pre"?"Pre-repair":"Post-repair")+" done \u2014 "+fmtDur(keyMs(st.lineKey))+" total"); }
+    // pause the car into Waiting (parts / customer / can't figure it out); starting any repair again resumes it
+    const waitBar=!wo||j.done?"":j.status==="waiting_parts"?`<div class="card wait-bar on"><div class="stage-t"><b>Waiting</b><span>${esc(waitLabel(j))} \u00b7 start a repair to resume</span></div>${can?`<button class="btn sm ghost" id="tjWaitWhy" type="button">Change reason</button>`:""}</div>`
+      :can&&["approved","in_progress"].includes(j.status)?`<button class="btn ghost wait-pause" id="tjWait" type="button">\u23f8 Pause \u2014 waiting on something</button>`:"";
     const stageBar=(k,label,done)=>{ const ms=keyMs(k), run=runK(k), act=can&&!j.done&&j.status!=="picked_up";
       return `<div class="card stage-bar${run?" on":""}${done?" done":""}"><div class="stage-t"><b>${label}</b><span>${run?"Timer running \u00b7 ":""}${ms||run?fmtDur(ms)+(done?" total":" so far"):done?"Complete":"Timer not started"}</span></div>`
         +(act?(run?`<button class="btn sm pause" data-stg-stop="${k}" type="button">\u23f8 Pause</button>`:!done?`<button class="btn sm start" data-stg-go="${k}" type="button">\u25b6 ${ms?"Resume":"Start"}</button>`:""):"")+`</div>`; };
@@ -2292,7 +2301,7 @@
     if(wo){ viewJobDetail.tab=tabT; viewJobDetail.tabFor=j.id; } // stay on this tab while working through it;
     $("#view").innerHTML = `${clockBarHTML()}
       <div class="tjd-bar"><div class="tjd-row"><button class="btn ghost sm" id="tjBack" type="button">\u2039 My jobs</button><span class="tjd-bar-t">${esc(vehOf(j)||j.title||"")}</span>${wo?`<span class="pill ${pct>=100?"green":"prog"}" id="wsPctPill">${pct}% done</span>`:""}</div>
-        ${wo?`<div class="tjd-tabs t3"><button type="button" data-tjt="pre" class="${tabT==="pre"?"on":""}">Pre-repair <small class="${preOK?"ok":"need"}">${preN}/${preT}</small></button><button type="button" data-tjt="rep" class="${tabT==="rep"?"on":""}">Repair <small class="${allDone?"ok":"need"}">${groups.filter(gDone).length}/${groups.length}</small></button><button type="button" data-tjt="post" class="${tabT==="post"?"on":""}">Post-repair <small class="${postOK?"ok":"need"}">${postN}/${postT}</small></button></div>${histBtn(j)}`:""}</div>
+        ${wo?`<div class="tjd-tabs t3"><button type="button" data-tjt="pre" class="${tabT==="pre"?"on":""}">Pre-repair <small class="${preOK?"ok":"need"}">${preN}/${preT}</small></button><button type="button" data-tjt="rep" class="${tabT==="rep"?"on":""}">Repair <small class="${allDone?"ok":"need"}">${groups.filter(gDone).length}/${groups.length}</small></button><button type="button" data-tjt="post" class="${tabT==="post"?"on":""}">Post-repair <small class="${postOK?"ok":"need"}">${postN}/${postT}</small></button></div>${waitBar}${histBtn(j)}`:""}</div>
       <div class="ws tjd-wrap">
       ${tabT==="pre"?stageBar("__pre","Pre-repair inspection",preOK)+preHTML(d,dis,j)+wsInspHTML(d,dis,j,"pre")+`<div class="tjd-next"><button class="btn ghost" data-tjt="rep" type="button">Go to repair \u203a</button></div>`
       :tabT==="post"?stageBar("__post","Post-repair test drive",postOK)+wsInspHTML(d,dis,j,"post")+`
@@ -2355,6 +2364,9 @@
       const miss=wsMissing(j,d); if(!miss.length) return finishCar();
       if(miss.length===1&&/odometer/.test(miss[0])) return askOdo(()=>afterDone());
       toast("All jobs complete. Still needed: "+miss.join(", ")); keep(); };
+    const goWait=r=>{ const run=runningTask(me.id); if(run&&run.jobId===j.id) stopTask(me.id); j.waitReason=r; setStatus(j,"waiting_parts"); save(); toast("Moved to Waiting \u2014 "+waitLabel(j)); viewJobDetail(j); };
+    if($("#tjWait")) $("#tjWait").onclick=()=>askWait(j, goWait);
+    if($("#tjWaitWhy")) $("#tjWaitWhy").onclick=()=>askWait(j, goWait);
     $("#view").querySelectorAll("[data-stg-go]").forEach(b=>b.onclick=async()=>{ b.disabled=true; const k=b.dataset.stgGo; if(await startJob(j,k,k==="__pre"?"pre-repair inspection":"post-repair test drive")) viewJobDetail(j); else b.disabled=false; });
     $("#view").querySelectorAll("[data-stg-stop]").forEach(b=>b.onclick=()=>{ const r=runningTask(me.id); if(r&&r.jobId===j.id){ stopTask(me.id); save(); toast("Paused \u2014 "+fmtDur(keyMs(b.dataset.stgStop))+" so far"); } viewJobDetail(j); });
     $("#view").querySelectorAll("[data-tjt]").forEach(b=>b.onclick=()=>{ viewJobDetail.tab=b.dataset.tjt; viewJobDetail.tabFor=j.id; viewJobDetail(j); window.scrollTo(0,0); });
@@ -3318,7 +3330,7 @@
     const jobsOf=ids=>[...new Set(ids)].map(id=>db.jobs.find(j=>j.id===id)).filter(Boolean);
     const payJobs=jobsOf(pays.map(p=>p.wo_id)), estJobs=jobsOf(ers.map(r=>r.wo_id)), discJobs=done.filter(j=>tot(j).discount>0), waitJobs=open.filter(j=>j.status==="waiting_parts"), owingJobs=owing.map(x=>x.j);
     const kpis=fin?[[done.length,"Car count",done],[money(sales.total),"Gross sales",done],[money(aro),"Avg repair order",done],[money(elr),"Effective labor rate",done],[money(gp),"Gross profit",done],[gpPct+"%","Gross profit %",done],[close,"Close ratio",estJobs],[money(collected),"Payments in",payJobs]]
-      :[[done.length,"Car count",done],[hrsBilled.toFixed(1),"Billed hours",done],[open.length,"Open work orders",open],[open.filter(j=>j.status==="waiting_parts").length,"Waiting on parts",waitJobs]];
+      :[[done.length,"Car count",done],[hrsBilled.toFixed(1),"Billed hours",done],[open.length,"Open work orders",open],[open.filter(j=>j.status==="waiting_parts").length,"Waiting",waitJobs]];
     S.overview=`<div class="stats rep-kpis">${kpis.map(([v,l,ls])=>`<div class="stat${ls.length?" click":""}"${ls.length?` data-tix="${tx(ls)}" data-tixt="${esc(l)}" role="button" tabindex="0"`:""}><b>${v}</b><span>${l}</span></div>`).join("")}</div>`
       +(fin?card("End of day summary", kvT([["Labor sales",money(sales.labor),done],["Parts sales",money(sales.parts),done],["Discounts",money(sales.disc),discJobs],["Sales tax",money(sales.tax),done],["Gross sales (with tax)",money(sales.total),done],
         ["Labor / parts split",pct(sales.labor,sales.labor+sales.parts)+" / "+pct(sales.parts,sales.labor+sales.parts)],["Billed hours",hrsBilled.toFixed(1),done],["Effective labor rate",money(elr)+" /hr",done],
@@ -3428,7 +3440,7 @@
     S.wip=card("Work orders right now", tbl([["Status"],["Count","num"]].concat(fin?[["Value","num"]]:[]), STATUS.filter(s=>s[0]!=="picked_up").map(([k])=>{ const l=db.jobs.filter(j=>isWO(j)&&j.status===k); return trowT([statusPill(k),[l.length]].concat(fin?[[money(sum(l,"total"))]]:[]),l); })))
       +card("Open work orders by age", tbl([["Invoice"],["Customer"],["Vehicle"],["Status"],["Technician"],["Days open","num"]].concat(fin?[["Value","num"]]:[]),
         open.map(j=>({j,d:Math.max(0,Math.floor((now-new Date((j.date||todayStr())+"T00:00").getTime())/86400000))})).sort((a,b)=>b.d-a.d).map(({j,d})=>trow1([no(j),name(j),esc(vehOf(j)),statusPill(j.status),esc(crewNames(j)),[d]].concat(fin?[[money(tot(j).total)]]:[]),j))))
-      +card("Waiting on parts", tbl([["Customer"],["Vehicle"],["Job"],["Technician"]], open.filter(j=>j.status==="waiting_parts").map(j=>trow1([name(j),esc(vehOf(j)),esc(j.title),esc(crewNames(j))],j))))
+      +card("Waiting", tbl([["Customer"],["Vehicle"],["Job"],["Technician"]], open.filter(j=>j.status==="waiting_parts").map(j=>trow1([name(j),esc(vehOf(j)),esc(j.title),esc(crewNames(j))],j))))
       +moreReports(R, done, open, fin, card, tbl, "wip");
 
     // ---- Our cars: the cars we buy, fix and sell (customer "Citea Motors"): time, parts, labor and profit per car (owners only)
@@ -4646,9 +4658,18 @@
   const SET = () => Object.assign({rateStd:179,rateTesla:199,tax:0.08375}, db.settings||{});
   const STATUS = [
     ["estimate","Estimate","est"],["approved","Approved","appr"],["in_progress","In progress","prog"],
-    ["waiting_parts","Waiting on parts","red"],["completed","Ready for pickup","green"],["picked_up","Picked up",""]
+    ["waiting_parts","Waiting","red"],["completed","Ready for pickup","green"],["picked_up","Picked up",""]
   ];
   const statusOf = k => STATUS.find(s=>s[0]===k) || STATUS[1];
+  // why a car is waiting. "diag" is never shown to the customer.
+  const WAIT_REASONS=[["parts","Waiting for parts"],["customer","Waiting for customer / misc"],["diag","Can't figure out issue"]];
+  const waitLabel=j=>(WAIT_REASONS.find(r=>r[0]===j.waitReason)||[,"Waiting \u2014 reason not set"])[1];
+  function askWait(j, done){
+    modal(`<h2>Why is it waiting?</h2><p class="muted" style="margin-top:0">${esc(vehOf(j)||j.title||"This car")} moves to <b>Waiting</b>.</p>
+      <div class="wait-reasons">${WAIT_REASONS.map(([k,l])=>`<button type="button" class="btn ${j.waitReason===k?"":"ghost"}" data-wr="${k}">${esc(l)}${k==="diag"?'<small>Not shown to the customer</small>':""}</button>`).join("")}</div>
+      <div class="row end" style="margin-top:12px"><button class="btn ghost" data-close type="button">Cancel</button></div>`, root=>{
+      root.querySelectorAll("[data-wr]").forEach(b=>b.onclick=()=>{ closeModal(); done(b.dataset.wr); }); });
+  }
   const statusPill = k => { const s=statusOf(k); return `<span class="pill ${s[2]}">${s[1]}</span>`; };
   const money = n => "$"+(Number(n)||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
   const r2 = n => Math.round((Number(n)||0)*100 + 1e-6)/100;             // round half-up to cents
@@ -4829,7 +4850,8 @@
     };
     const cols=[
       ["Estimates","est",["estimate"]],
-      ["Work in progress","",["approved","in_progress","waiting_parts"]],
+      ["Waiting","wait",["waiting_parts"]],
+      ["Work in progress","",["approved","in_progress"]],
       ["Ready for pickup","done",["completed"]],
       ...(viewWip.showClosed?[["Picked up","closed",["picked_up"]]]:[])
     ];
@@ -4837,24 +4859,24 @@
     $("#view").innerHTML=`
       <div class="stats wip-stats">
         <div class="stat"><b>${open.length}</b><span>Cars in shop</span></div>
-        <div class="stat"><b>${open.filter(j=>j.status==="waiting_parts").length}</b><span>Waiting on parts</span></div>
+        <div class="stat"><b>${open.filter(j=>j.status==="waiting_parts").length}</b><span>Waiting</span></div>
         <div class="stat"><b>${open.filter(j=>j.status==="completed").length}</b><span>Ready for pickup</span></div>
         ${isFin()?`<div class="stat"><b>${money(openVal)}</b><span>Open work</span></div>`:`<div class="stat"><b>${(db.appointments||[]).filter(a=>a.date===todayStr()&&!["cancelled","no_show"].includes(a.status)).length}</b><span>Appointments today</span></div>`}
       </div>
       <div class="board-tools">
-        ${chip("all","All",open.length)}${chip("urgent","Urgent",open.filter(j=>j.priority==="high").length)}${chip("parts","Waiting on parts",open.filter(j=>j.status==="waiting_parts").length)}
+        ${chip("all","All",open.length)}${chip("urgent","Urgent",open.filter(j=>j.priority==="high").length)}${chip("parts","Waiting",open.filter(j=>j.status==="waiting_parts").length)}
         ${techs.slice().sort((a,b)=>techBusy(b)-techBusy(a)).map(u=>chip("u:"+u.id,(techBusy(u)?'<i class="busy-dot" title="Working on a car now"></i>':"")+esc(u.name),open.filter(j=>onCrew(j,u.id)).length)).join("")}
         <span class="spacer"></span>
         <input id="wipQ" placeholder="Filter board\u2026" value="${esc(viewWip.q||"")}" style="width:200px">
         <label class="inline"><input type="checkbox" id="wipClosed" ${viewWip.showClosed?"checked":""}> Picked up</label>
       </div>
-      ${(()=>{ const n=sts=>db.jobs.filter(j=>isWO(j)&&sts.includes(j.status)&&pass(j)&&onBoard(j)).length; const mc=Math.min(viewWip.mcol??1,cols.length-1);
+      ${(()=>{ const n=sts=>db.jobs.filter(j=>isWO(j)&&sts.includes(j.status)&&pass(j)&&onBoard(j)).length; const mc=Math.min(viewWip.mcol??2,cols.length-1);
         return `<div class="mtabs" role="tablist">${cols.map(([label,cls,sts],i)=>`<button type="button" role="tab" data-mcol="${i}" class="${cls} ${i===mc?"on":""}">${label==="Work in progress"?"In progress":label}<span>${n(sts)}</span></button>`).join("")}</div>`; })()}
-      <div class="kanban mtab ${cols.length===4?"four":""}">${cols.map(([label,cls,sts],ci)=>{
+      <div class="kanban mtab ${cols.length===5?"five":cols.length===4?"four":""}">${cols.map(([label,cls,sts],ci)=>{
         const items=db.jobs.filter(j=>isWO(j)&&sts.includes(j.status)&&pass(j)&&onBoard(j))
           .sort((a,b)=>(workingOn(b)-workingOn(a)) || (prioRank[a.priority]-prioRank[b.priority]) || (sts.indexOf(a.status)-sts.indexOf(b.status)));
         const sum=items.reduce((s,j)=>s+woTotals(j).total,0);
-        return `<div class="kcol ${ci===Math.min(viewWip.mcol??1,cols.length-1)?"mshow":""}" data-kdrop="${sts[0]==="approved"?"in_progress":sts[0]}" data-ksts="${sts.join(",")}"><div class="khead ${cls}">${label}<span class="n">${items.length}</span>${isFin()?`<span class="sum">${money(sum)}</span>`:""}</div>
+        return `<div class="kcol ${ci===Math.min(viewWip.mcol??2,cols.length-1)?"mshow":""}" data-kdrop="${sts[0]==="approved"?"in_progress":sts[0]}" data-ksts="${sts.join(",")}"><div class="khead ${cls}">${label}<span class="n">${items.length}</span>${isFin()?`<span class="sum">${money(sum)}</span>`:""}</div>
           <div class="kbody">${items.map(j=>woCard(j, sts.length>1)).join("") || `<div class="empty" style="padding:18px 4px">Nothing here</div>`}</div></div>`; }).join("")}</div>`;
     $("#view").querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{ viewWip.f=b.dataset.f; viewWip(); });
     const qi=$("#wipQ"); qi.oninput=e=>{ viewWip.q=e.target.value; const pos=e.target.selectionStart; viewWip(); const n=$("#wipQ"); n.focus(); n.setSelectionRange(pos,pos); };
@@ -4875,7 +4897,9 @@
       col.ondragleave=e=>{ if(!col.contains(e.relatedTarget)) col.classList.remove("drop"); };
       col.ondrop=e=>{ e.preventDefault(); col.classList.remove("drop"); const j=db.jobs.find(x=>x.id===dragId); dragId=null; if(!j) return;
         if(col.dataset.ksts.split(",").includes(j.status)) return;           // already in this column
-        const to=col.dataset.kdrop; if(needsSig(j,to)) return toast(SIG_MSG); setStatus(j,to); save(); toast(`${(custOf(j)||{}).name||"Work order"} moved to ${statusOf(to)[1]}`); viewWip(); };
+        const to=col.dataset.kdrop; if(needsSig(j,to)) return toast(SIG_MSG);
+        if(to==="waiting_parts") return askWait(j, r=>{ j.waitReason=r; setStatus(j,to); save(); toast(`${(custOf(j)||{}).name||"Work order"} \u2014 ${waitLabel(j)}`); viewWip(); });
+        setStatus(j,to); save(); toast(`${(custOf(j)||{}).name||"Work order"} moved to ${statusOf(to)[1]}`); viewWip(); };
     });
     clearInterval(tick); tick=setInterval(()=>{ if(!$("#modalRoot").innerHTML && document.activeElement!==$("#wipQ")) viewWip(); },30000);
   }
@@ -5523,7 +5547,7 @@
     const er=(db.estimates||[]).filter(r=>r.wo_id===j.id).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)))[0];
     const tm=d=>new Date(d).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
     const apr=validApproval(j);
-    const tags=[ j.priority==="high"?'<span class="pill red">Urgent</span>':"", j.status==="estimate"&&woMissing(j)?'<span class="pill" style="background:var(--graphite);color:#fff">Write-up not finished</span>':"", showStatus&&!(j.status==="approved"&&apr)?statusPill(j.status):"",
+    const tags=[ j.priority==="high"?'<span class="pill red">Urgent</span>':"", j.status==="estimate"&&woMissing(j)?'<span class="pill" style="background:var(--graphite);color:#fff">Write-up not finished</span>':"", showStatus&&!(j.status==="approved"&&apr)&&j.status!=="waiting_parts"?statusPill(j.status):"", j.status==="waiting_parts"?`<span class="pill red">${esc(waitLabel(j))}</span>`:"",
       apr&&apr.own?'<span class="pill green">Our car \u00b7 no approval needed</span>':apr?'<span class="pill green">Approved</span>':lastApproval(j)?'<span class="pill red">New estimate not approved</span>':j.status==="estimate"?'<span class="pill red">Not approved</span>':"",
       run?`<span class="pill work">\u25cf ${esc([...new Set(runs.map(r=>userName(r.userId)))].join(", "))} working</span>`:"",
       er&&er.status==="declined"?`<span class="pill red">Customer declined estimate ${esc(tm(er.decided_at||er.created_at))}</span>`:!apr&&er&&er.status==="sent"&&(j.status==="estimate"||lastApproval(j))?(er.seen_at?`<span class="pill appr" style="background:var(--graphite)">Customer opened ${j.status==="estimate"?"":"revised "}estimate ${esc(tm(er.seen_at))}</span>`:`<span class="pill prog">${j.status==="estimate"?"Estimate":"Revised estimate"} sent ${esc(tm(er.created_at))}</span><span class="pill">Not opened yet</span>`):"" ].join("");
@@ -5576,7 +5600,7 @@
           <span class="spacer"></span>
           ${existing&&spent?`<span class="pill">\u23f1 ${fmtDur(spent)} tech time</span>`:""}
         </div>
-        <div class="stepper">${STATUS.map(([k,l,c],i)=>`<button type="button" data-step="${k}" class="${i<cur?"past":""} ${i===cur?"cur "+(c==="red"||c==="green"?c:""):""}">${l}</button>`).join("")}</div>
+        <div class="stepper">${STATUS.map(([k,l,c],i)=>`<button type="button" data-step="${k}" class="${i<cur?"past":""} ${i===cur?"cur "+(c==="red"||c==="green"?c:""):""}">${l}</button>`).join("")}</div>${j.status==="waiting_parts"?`<div class="wait-why"><span class="pill red">${esc(waitLabel(j))}</span> <button type="button" class="btn ghost sm" id="wWaitWhy">Change reason</button></div>`:""}
       </div>
       <input type="hidden" id="wStatus" value="${j.status}">
       <div class="ro-layout wosec-${woTab}">
@@ -5713,7 +5737,10 @@
       if(lastSig===null){ pull(); lastSig=sigOf(); } else autoSave();
       document.querySelectorAll("[data-wotab]").forEach(b=>b.onclick=()=>setWoTab(b.dataset.wotab));
       $("#woBack").onclick=$("#woCancel").onclick=()=>{ autoNow(); show(openWO.from||"wip"); };
-      $("#view").querySelectorAll("[data-step]").forEach(b=>b.onclick=()=>{ pull(); if(needsSig(j,b.dataset.step)) return toast(SIG_MSG); j.status=b.dataset.step; render(); });
+      $("#view").querySelectorAll("[data-step]").forEach(b=>b.onclick=()=>{ pull(); if(needsSig(j,b.dataset.step)) return toast(SIG_MSG);
+        if(b.dataset.step==="waiting_parts") return askWait(j, r=>{ j.waitReason=r; j.status="waiting_parts"; render(); });
+        j.status=b.dataset.step; render(); });
+      { const wr=$("#wWaitWhy"); if(wr) wr.onclick=()=>askWait(j, r=>{ j.waitReason=r; render(); }); }
       const pickCust=c=>{ pull(); newCust=false; j.customerId=c.id; delete j._cName; delete j._cPhone; delete j._cEmail; delete j._cTextOk;
         const vs=db.vehicles.filter(v=>v.customerId===c.id); if(vs.length===1){ fillVeh(vs[0]); newVeh=false; } else { j.vehicleId=""; newVeh=!vs.length; }
         render(); toast("Existing customer: "+c.name); };
@@ -5934,8 +5961,7 @@
     ["Fluids & engine",[["oil","Engine oil level & condition"],["coolant","Coolant level & condition"],["brakefl","Brake fluid"],["obd","OBD-II scan (list every code)"],["dash","Dash warning lights"]]],
     ["Brakes, tires & suspension",[["fbrake","Front brakes (pads / rotors)"],["rbrake","Rear brakes (pads / rotors / shoes)"],["tires","Tire tread & condition"],["tpress","Tire pressure"],["susp","Suspension & steering parts"]]],
     ["Leaks, hardware, battery & alignment",[["leaks","Leaks (oil, coolant, trans, steering)"],["belts","Belts & hoses"],["battery","Battery & terminals"],["align","Alignment / tire wear pattern"]]],
-    ["Test drive: noise, steering & handling",[["noise","Noises"],["steer","Steering play"],["tdsusp","Suspension"],["tdalign","Alignment (pull / wheel off center)"],["tdbrake","Brakes"],["trans","Transmission shifting"],["engine","Engine performance"],["vib","Vibration"]]],
-    ["Drive test: A/C",[["ac","A/C cooling & blower"]]]
+    ["Test drive: noise, steering & handling",[["noise","Noises"],["steer","Steering play"],["tdsusp","Suspension"],["tdalign","Alignment (pull / wheel off center)"],["tdbrake","Brakes"],["trans","Transmission shifting"],["engine","Engine performance"],["vib","Vibration"],["ac","A/C cooling & blower"]]]
   ];
   const WS_ITEMS=WS_GROUPS.flatMap(g=>g[1]);
   // electric vehicles get their own inspection (no oil, belts, transmission or engine; adds high-voltage, charging and regen checks)
@@ -5943,8 +5969,7 @@
     ["High voltage & battery",[["evsoc","HV battery: charge level & range (note % and miles)"],["evhealth","HV battery health / warnings in the car's service menu"],["evcharge","Charge port, door & charging test (note kW)"],["evcable","HV cables, orange connectors & battery case (underbody damage)"],["evcool","Battery / motor coolant level"],["battery","12V (low-voltage) battery & terminals"],["obd","Diagnostic scan of all modules (list every code)"],["dash","Dash / touchscreen warnings & alerts"]]],
     ["Brakes, tires & suspension",[["fbrake","Front brakes (pads / rotors / caliper slides)"],["rbrake","Rear brakes (rust, seized calipers, parking brake)"],["brakefl","Brake fluid"],["tires","Tire tread & condition (inner edges)"],["tpress","Tire pressure"],["susp","Suspension, steering & control arm bushings"],["align","Alignment / tire wear pattern"]]],
     ["Body, cabin & underbody",[["evleaks","Leaks (coolant, gear oil, A/C)"],["evshield","Underbody shields & aero panels"],["cabfilt","Cabin air filter"],["wipers","Wipers & washer fluid"],["lights","Exterior lights"],["evcam","Cameras & parking sensors"]]],
-    ["Test drive: noise, steering & handling",[["noise","Noises (clunks, rattles)"],["evmotor","Drive unit / motor whine or hum"],["steer","Steering play"],["tdsusp","Suspension"],["tdalign","Alignment (pull / wheel off center)"],["tdbrake","Brakes"],["evregen","Regenerative braking"],["evpower","Acceleration & power delivery"],["vib","Vibration"]]],
-    ["Drive test: A/C & heat",[["ac","A/C cooling & blower"],["evheat","Heat pump / cabin heat"]]]
+    ["Test drive: noise, steering & handling",[["noise","Noises (clunks, rattles)"],["evmotor","Drive unit / motor whine or hum"],["steer","Steering play"],["tdsusp","Suspension"],["tdalign","Alignment (pull / wheel off center)"],["tdbrake","Brakes"],["evregen","Regenerative braking"],["evpower","Acceleration & power delivery"],["vib","Vibration"],["ac","A/C cooling & blower"],["evheat","Heat pump / cabin heat"]]]
   ];
   const WS_ITEMS_EV=WS_GROUPS_EV.flatMap(g=>g[1]);
   const EV_MAKE=/^(tesla|rivian|lucid|polestar|fisker)/i;
