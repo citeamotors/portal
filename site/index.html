@@ -379,6 +379,8 @@
   td.num,th.num{text-align:right}
   .tablewrap{overflow-x:auto}
   tr.click,.click{cursor:pointer}
+  .dep-btn{width:100%;margin-top:10px;display:flex;flex-direction:column;align-items:center;gap:2px}.dep-btn small{font-size:12px;white-space:normal;text-align:center;color:var(--steel,#686868);font-weight:400;text-transform:none;letter-spacing:0}
+  .dep-quick{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
   .clean-card{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding:14px 16px}
   .clean-card .clean-ic{font-size:24px;line-height:1}
   .clean-card .clean-txt{flex:1;min-width:0;display:flex;flex-direction:column}
@@ -3961,10 +3963,10 @@
   }
   /* ---------- Square: open Square Point of Sale with the balance filled in; it comes back here when paid ---------- */
   const SQ_CB="https://teams.citeamotors.com/";
-  function sqCharge(j){
+  function sqCharge(j, depAmt){
     const app=SET().squareAppId; if(!app){ toast("Add the Square Application ID in Settings first."); return; }
-    const amt=Math.max(0,r2(woTotals(j).total-paidOf(j))); if(!(amt>0)){ toast("Nothing left to charge."); return; }
-    const cents=Math.round(amt*100), state=JSON.stringify({w:j.id,a:amt,t:Date.now()}), note=`${vehOf(j)} \u00b7 work order`.slice(0,500);
+    const amt=depAmt>0?r2(depAmt):Math.max(0,r2(woTotals(j).total-paidOf(j))); if(!(amt>0)){ toast("Nothing left to charge."); return; }
+    const cents=Math.round(amt*100), state=JSON.stringify({w:j.id,a:amt,t:Date.now(),...(depAmt>0?{k:"deposit"}:{})}), note=`${vehOf(j)} \u00b7 work order${depAmt>0?" deposit":""}`.slice(0,500);
     try{ localStorage.setItem("citea-sq-pending",state); }catch(e){}
     let url;
     if(/Android/i.test(navigator.userAgent)){
@@ -3998,7 +4000,7 @@
     let seen=[]; try{ seen=JSON.parse(localStorage.getItem("citea-sq-done")||"[]"); }catch(e){}
     if(ref&&(seen.includes(ref)||(db.payments||[]).some(p=>p.wo_id===j.id&&String(p.note||"").includes(ref)))){ openWO(j.id); return; }
     if(ref) try{ localStorage.setItem("citea-sq-done",JSON.stringify([ref,...seen].slice(0,50))); }catch(e){}
-    const row={wo_id:j.id,amount:r2(st.a),fee:0,discount:0,method:"credit",kind:"payment",note:"Square"+(ref?" \u00b7 "+ref:""),received_by:me.id};
+    const row={wo_id:j.id,amount:r2(st.a),fee:0,discount:0,method:"credit",kind:st.k==="deposit"?"deposit":"payment",note:"Square"+(ref?" \u00b7 "+ref:""),received_by:me.id};
     const {data,error}=await sb.from("payments").insert(row).select().single();
     if(error){ toast("Paid in Square, but couldn't save it here: "+error.message+" \u2014 record it by hand."); openWO(j.id); return; }
     db.payments=db.payments||[]; if(!db.payments.some(p=>p.id===data.id)) db.payments.push(data);
@@ -4077,11 +4079,42 @@
     return `${pays.map(p=>`<div class="tl pay-line"><span>${esc(payLabel(p.method))} payment${p.kind==="deposit"?" (deposit)":""}<small class="muted">${new Date(p.created_at).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}${p.note?" \u00b7 "+esc(p.note):""}</small></span>
         <span class="mono">\u2212${money(r2(Number(p.amount)+Number(p.discount||0)))} <button class="x" data-payvoid="${p.id}" type="button" aria-label="Void payment" title="Void">\u00d7</button></span></div>`).join("")}
       <div class="tl grand"><span>Balance due</span><span class="mono" id="tBal" style="${bal<-0.004?"color:var(--red)":""}">${money(bal)}</span></div>
-      <div class="pay-steps">${stepBtns(j)}</div>
+      ${j.status==="estimate"?"":`<div class="pay-steps">${stepBtns(j)}</div>`}
       ${fees?`<div class="hint">Card fees collected earlier: ${money(fees)} (not part of the balance).</div>`:""}
       <button id="payAdd" type="button" hidden></button>
-      ${bal>0.004?`<button class="btn start sq-btn" id="payTake" type="button" ${custNotified(j)?"":'disabled aria-disabled="true"'}>${bal>0.004?'<span class="stepno">3</span>':""}<span>Take payment</span><b class="mono">${money(bal)}</b></button>${custNotified(j)?"":`<div class="hint step-hint">${wsSeen(j)?"Notify the customer first.":"Open the technician worksheet, then notify the customer, first."}</div>`}`:""}
+      ${bal>0.004&&!j.done&&can("pay")?`<button class="btn ghost dep-btn" id="payDep" type="button"><span>Take a deposit</span><small>Any time \u2014 no worksheet needed</small></button>`:""}
+      ${bal>0.004&&j.status!=="estimate"?`<button class="btn start sq-btn" id="payTake" type="button" ${custNotified(j)?"":'disabled aria-disabled="true"'}>${bal>0.004?'<span class="stepno">3</span>':""}<span>Take payment</span><b class="mono">${money(bal)}</b></button>${custNotified(j)?"":`<div class="hint step-hint">${wsSeen(j)?"Notify the customer first.":"Open the technician worksheet, then notify the customer, first."}</div>`}`:""}
       ${pays.length?`<button class="btn ghost" id="payPrint" type="button" style="width:100%;margin-top:10px">Print receipt</button>`:""}`;
+  }
+  // Deposit: part of the balance, taken any time (before the car is done). It can't pay the whole balance off.
+  function takeDeposit(j, after){
+    const bal=Math.max(0,r2(woTotals(j).total-paidOf(j))), sq=!!SET().squareAppId, max=r2(bal-0.01);
+    if(!(bal>0.01)){ toast("Nothing owed on this work order."); return; }
+    modal(`<h2>Take a deposit</h2><p class="muted" style="margin-top:0">Balance due <b class="mono">${money(bal)}</b>. A deposit goes toward this work order. The rest is paid with <b>Take payment</b> when the car is done.</p>
+      <div class="two"><div><label>Deposit amount</label><input id="dAmt" class="mono" inputmode="decimal" placeholder="0.00"></div>
+        <div><label>Paid by</label><select id="dMeth">${PAY_METHODS.filter(([k])=>k!=="snap"&&k!=="affirm").map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select></div></div>
+      <div class="dep-quick">${[0.25,0.5].map(f=>`<button type="button" class="chip" data-dq="${r2(bal*f)}">${f*100}% \u00b7 ${money(r2(bal*f))}</button>`).join("")}</div>
+      <label>Note (optional)</label><input id="dNote" placeholder="e.g. parts deposit, Zelle confirmation #">
+      <div class="err" id="dErr"></div>
+      <div class="row end" style="margin-top:12px"><button class="btn ghost" data-close type="button">Cancel</button>
+        ${sq?`<button class="btn dark" id="dSq" type="button">Charge card with Square</button>`:""}<button class="btn" id="dSave" type="button">Record deposit</button></div>`, root=>{
+      const q=s=>root.querySelector(s), amt=()=>r2(parseFloat(String(q("#dAmt").value).replace(/[^0-9.]/g,""))||0);
+      const check=()=>{ const a=amt(); if(!(a>0)){ q("#dErr").textContent="Enter the deposit amount."; return false; }
+        if(a>max){ q("#dErr").textContent=`A deposit has to be less than the ${money(bal)} balance. To pay it all off, use Take payment.`; return false; } q("#dErr").textContent=""; return true; };
+      root.querySelectorAll("[data-dq]").forEach(b=>b.onclick=()=>{ q("#dAmt").value=Number(b.dataset.dq).toFixed(2); check(); });
+      q("#dAmt").oninput=()=>{ if(q("#dErr").textContent) check(); };
+      if(q("#dSq")) q("#dSq").onclick=()=>{ if(!check()) return; closeModal(); sqCharge(j, amt()); };
+      q("#dSave").onclick=async()=>{ if(!check()) return; const a=amt(), m=q("#dMeth").value;
+        const dup=(db.payments||[]).find(p=>p.wo_id===j.id&&!p.voided_at&&Math.abs(Number(p.amount)-a)<0.005&&p.method===m&&Date.now()-new Date(p.created_at).getTime()<10*60000);
+        if(dup&&!confirm(`A ${money(a)} ${M_LABEL[m]||m} payment was already recorded on this ticket a few minutes ago. Record another one?`)) return;
+        const b=q("#dSave"); if(b.disabled) return; b.disabled=true;
+        await flushPush();
+        const {data,error}=await sb.from("payments").insert({wo_id:j.id,amount:a,fee:0,discount:0,method:m,kind:"deposit",note:q("#dNote").value.trim()||null,received_by:me.id}).select().single();
+        if(error){ b.disabled=false; q("#dErr").textContent="Couldn't save: "+error.message; return; }
+        db.payments=db.payments||[]; if(!db.payments.some(p=>p.id===data.id)) db.payments.push(data);
+        closeModal(); after&&after(); paidPrompt(db.jobs.find(x=>x.id===j.id)||j, data); };
+      setTimeout(()=>q("#dAmt").focus(),50);
+    });
   }
   // Take payment: card through Square, or record cash / Zelle
   function takePayment(j, after){
@@ -4224,7 +4257,7 @@
   // after a payment: offer the same receipt the customer sees on their page
   function paidPrompt(j, p){
     const bal=r2(woTotals(j).total-paidOf(j));
-    modal(`<h2>Payment recorded</h2><p class="muted" style="margin-top:0">${esc(payLabel(p.method))} payment of <b class="mono">${money(p.amount)}</b>. ${bal>0.004?"Balance left "+`<b class="mono">${money(bal)}</b>.`:"Paid in full."}</p>
+    modal(`<h2>Payment recorded</h2><p class="muted" style="margin-top:0">${esc(payLabel(p.method))} ${p.kind==="deposit"?"deposit":"payment"} of <b class="mono">${money(p.amount)}</b>. ${bal>0.004?"Balance left "+`<b class="mono">${money(bal)}</b>.`:"Paid in full."}</p>
       <div class="pp-btns"><button class="btn" id="ppPrint" type="button">Print receipt</button><button class="btn dark" id="ppText" type="button">Text receipt</button><button class="btn dark" id="ppMail" type="button">Email receipt</button><button class="btn ghost" data-close type="button">Done</button></div>`, root=>{
       root.querySelector("#ppPrint").onclick=()=>{ closeModal(); printCustReceipt(j); };
       root.querySelector("#ppText").onclick=()=>{ closeModal(); textReceipt(j,p); };
@@ -5619,7 +5652,7 @@
               <div class="tl"><span>Tax \u00b7 ${+(SET().tax*100).toFixed(3)}% parts</span><span id="tTax">${money(t.tax)}</span></div>
               <div class="tl" id="tDiscRow" ${t.discount?"":'style="display:none"'}><span>Discount</span><span id="tDisc">\u2212${money(t.discount)}</span></div>
               <div class="tl ${existing&&me.role==="manager"&&j.status!=="estimate"?"tot-sub":"grand"}"><span>Total</span><span id="tTot">${money(t.total)}</span></div>
-              ${existing&&me.role==="manager"&&j.status!=="estimate"?payCard(j):""}
+              ${existing&&me.role==="manager"?payCard(j):""}
               <div id="apprWarn" class="hint hidden" style="color:var(--red);margin-top:8px">The price is now higher than what the customer approved. Saving moves this job back to Estimates until they approve the new price. Lowering the price never needs a new approval.</div>
               <div class="err" id="woErr"></div>
               <div class="actions">
@@ -5743,6 +5776,7 @@
       { const drop=(ok,ids)=>{ if(!ok) ids.forEach(i=>{ const e=$("#"+i); if(e) e.remove(); }); };
         drop(can("send"),["woSend","custLinkSend","woPublish","woPublishNote","woReady"]); drop(can("pay"),["payAdd","payTake","qboPay","payPrint"]); drop(can("qbo"),["qboSend"]); }
       const ppr=$("#payPrint"); if(ppr) ppr.onclick=()=>{ if(!persistWO()) return; printCustReceipt(db.jobs.find(x=>x.id===j.id)||existing); };
+      const pdp=$("#payDep"); if(pdp) pdp.onclick=()=>{ if(!persistWO()) return; takeDeposit(db.jobs.find(x=>x.id===j.id)||j, ()=>openWO(j.id)); };
       const ptk=$("#payTake"); if(ptk) ptk.onclick=()=>{ if(!custNotified(j)){ toast("Open the technician worksheet and notify the customer first."); return; } if(!persistWO()) return; takePayment(db.jobs.find(x=>x.id===j.id)||existing, reopen); };
       const qp=$("#qboPay"); if(qp) qp.onclick=()=>qboPayHelp(db.jobs.find(x=>x.id===j.id)||existing);
       const qy=$("#qboSync"); if(qy) qy.onclick=async()=>{ qy.disabled=true; await qboSync([j.id]); toast("QuickBooks is up to date"); reopen(); };
