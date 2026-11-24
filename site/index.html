@@ -3830,7 +3830,7 @@
     const cur=new Map(jobGroups(j).map(g=>[g.key,g])), dec=new Set(Array.isArray(la.declined_jobs)?la.declined_jobs.map(String):[]);
     return new Set(s.jobs.filter(x=>x.key&&!dec.has(String(x.key))&&cur.has(x.key)&&Number(cur.get(x.key).lab+cur.get(x.key).par)-(Number(x.labor_total||0)+Number(x.parts_total||0))<=0.05).map(x=>x.key)); }
   // technicians see approval, not the estimate stage
-  const techStatusPill=j=>isOwnCar(j)&&["estimate","approved"].includes(j.status)?'<span class="pill green">Our car</span>':j.status==="estimate"?(validApproval(j)?'<span class="pill green">Approved</span>':approvedJobKeys(j).size?'<span class="pill red">New jobs not approved</span>':'<span class="pill red">Not approved</span>'):statusPill(j.status);
+  const techStatusPill=j=>isOwnCar(j)&&["estimate","approved"].includes(j.status)?'<span class="pill green">Shop car</span>':j.status==="estimate"?(validApproval(j)?'<span class="pill green">Approved</span>':approvedJobKeys(j).size?'<span class="pill red">New jobs not approved</span>':'<span class="pill red">Not approved</span>'):statusPill(j.status);
   function lastApproval(j){ return (db.estimates||[]).filter(r=>r.wo_id===j.id&&r.status==="approved").sort((a,b)=>String(b.decided_at||b.created_at).localeCompare(String(a.decided_at||a.created_at)))[0]||null; }
   // a lower price never needs a new OK: an approval only stops counting when the price goes ABOVE what was approved
   const priceMoved = (j,r) => woTotals(j).total-Number(r.approved_total||0)>0.05;
@@ -3839,7 +3839,7 @@
   // our own cars (customer "Citea Motors", the cars we sell) never wait on a customer approval
   const isOwnCustName=n=>String(n||"").toLowerCase().replace(/[^a-z]/g,"")==="citeamotors";
   const isOwnCar=j=>!!(j&&j.customerId&&isOwnCustName(((db.customers||[]).find(c=>c.id===j.customerId)||{}).name));
-  const OWN_OK={id:"own",status:"approved",signer_name:"Citea Motors (our car)",approved_total:1e12,own:true};
+  const OWN_OK={id:"own",status:"approved",signer_name:"Citea Motors (shop car)",approved_total:1e12,own:true};
   function validApproval(j){ if(isOwnCar(j)) return OWN_OK; return (db.estimates||[]).filter(r=>r.wo_id===j.id&&r.status==="approved"&&!priceMoved(j,r)).sort((a,b)=>String(b.decided_at||b.created_at).localeCompare(String(a.decided_at||a.created_at)))[0]||null; }
   function voidApproval(j){ const r=lastApproval(j); if(!r||r.superseded_at||!priceMoved(j,r)) return false;
     r.superseded_at=new Date().toISOString(); sb.from("estimate_requests").update({superseded_at:r.superseded_at}).eq("id",r.id).then(({error})=>{ if(error) toast("Couldn't record the price change: "+error.message); }); return true; }
@@ -5548,7 +5548,7 @@
     const tm=d=>new Date(d).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
     const apr=validApproval(j);
     const tags=[ j.priority==="high"?'<span class="pill red">Urgent</span>':"", j.status==="estimate"&&woMissing(j)?'<span class="pill" style="background:var(--graphite);color:#fff">Write-up not finished</span>':"", showStatus&&!(j.status==="approved"&&apr)&&j.status!=="waiting_parts"?statusPill(j.status):"", j.status==="waiting_parts"?`<span class="pill red">${esc(waitLabel(j))}</span>`:"",
-      apr&&apr.own?'<span class="pill green">Our car \u00b7 no approval needed</span>':apr?'<span class="pill green">Approved</span>':lastApproval(j)?'<span class="pill red">New estimate not approved</span>':j.status==="estimate"?'<span class="pill red">Not approved</span>':"",
+      apr&&apr.own?'<span class="pill green">Shop car</span>':apr?'<span class="pill green">Approved</span>':lastApproval(j)?'<span class="pill red">New estimate not approved</span>':j.status==="estimate"?'<span class="pill red">Not approved</span>':"",
       run?`<span class="pill work">\u25cf ${esc([...new Set(runs.map(r=>userName(r.userId)))].join(", "))} working</span>`:"",
       er&&er.status==="declined"?`<span class="pill red">Customer declined estimate ${esc(tm(er.decided_at||er.created_at))}</span>`:!apr&&er&&er.status==="sent"&&(j.status==="estimate"||lastApproval(j))?(er.seen_at?`<span class="pill appr" style="background:var(--graphite)">Customer opened ${j.status==="estimate"?"":"revised "}estimate ${esc(tm(er.seen_at))}</span>`:`<span class="pill prog">${j.status==="estimate"?"Estimate":"Revised estimate"} sent ${esc(tm(er.created_at))}</span><span class="pill">Not opened yet</span>`):"" ].join("");
     return `<div class="wocard ${j.priority==="high"?"urgent":""}" data-wo="${j.id}" draggable="true" role="button" tabindex="0">
