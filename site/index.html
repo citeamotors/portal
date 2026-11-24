@@ -1264,14 +1264,25 @@
     loadVehiclePhotos();
   }
   // car photos arrive a moment after login; they don't count as changes made on this device
+  // car + key photos are kept on this device (IndexedDB) and only downloaded again when they change on the server
+  const phDB=()=>new Promise((res,rej)=>{ const r=indexedDB.open("citea-photos",1); r.onupgradeneeded=()=>r.result.createObjectStore("veh"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
+  const phAll=async()=>{ const d=await phDB(); return new Promise(res=>{ const out={}, t=d.transaction("veh").objectStore("veh").openCursor(); t.onsuccess=e=>{ const c=e.target.result; if(c){ out[c.key]=c.value; c.continue(); } else res(out); }; t.onerror=()=>res(out); }); };
+  const phPut=async(rows)=>{ const d=await phDB(); return new Promise(res=>{ const tx=d.transaction("veh","readwrite"), st=tx.objectStore("veh"); rows.forEach(r=>st.put(r.v,r.k)); tx.oncomplete=res; tx.onerror=res; }); };
   async function loadVehiclePhotos(){
     try{
-      const rows=await fetchAll("vehicles","id,photo,kp:extra->>keyPhoto"); if(!db||!db.vehicles) return;
+      const sigs=await fetchAll("vehicles","id,photo_sig"); if(!db||!db.vehicles) return;
+      let cache={}; try{ cache=await phAll(); }catch(e){}
+      const stale=sigs.filter(r=>!cache[r.id]||cache[r.id].sig!==r.photo_sig).map(r=>r.id);
+      let fresh=[];
+      for(let i=0;i<stale.length;i+=50){ const {data,error}=await sb.from("vehicles").select("id,photo,photo_sig,kp:extra->>keyPhoto").in("id",stale.slice(i,i+50)); if(error) throw error; fresh.push(...data); }
+      if(fresh.length) try{ await phPut(fresh.map(r=>({k:r.id,v:{sig:r.photo_sig,photo:r.photo||"",kp:r.kp||""}}))); }catch(e){}
+      fresh.forEach(r=>{ cache[r.id]={sig:r.photo_sig,photo:r.photo||"",kp:r.kp||""}; });
+      if(!db||!db.vehicles) return;
       const sv=snap.vehicles||new Map(), cur=new Map(rowsOf("vehicles").map(r=>[r.id,JSON.stringify(r)]));
       const byId=new Map(db.vehicles.map(v=>[v.id,v]));
-      rows.forEach(r=>{ const v=byId.get(r.id); if(!v||(v.photo!==undefined&&v.keyPhoto!==undefined)) return; const clean=sv.get(r.id)===cur.get(r.id);
-        if(v.photo===undefined&&r.photo!=null) v.photo=r.photo; if(v.keyPhoto===undefined&&r.kp!=null) v.keyPhoto=r.kp;
-        if(clean){ const nr=rowsOf("vehicles").find(x=>x.id===r.id); if(nr) sv.set(r.id,JSON.stringify(nr)); } });
+      sigs.forEach(({id})=>{ const v=byId.get(id), c=cache[id]; if(!v||!c||(v.photo!==undefined&&v.keyPhoto!==undefined)) return; const clean=sv.get(id)===cur.get(id);
+        if(v.photo===undefined&&c.photo) v.photo=c.photo; if(v.keyPhoto===undefined&&c.kp) v.keyPhoto=c.kp;
+        if(clean){ const nr=rowsOf("vehicles").find(x=>x.id===id); if(nr) sv.set(id,JSON.stringify(nr)); } });
       scheduleRender();
     }catch(e){}
   }
