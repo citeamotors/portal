@@ -1535,6 +1535,22 @@
     finally{ catchUp.busy=false; }
   }
   setInterval(()=>{ if(document.visibilityState==="visible") catchUp(); },30000);
+  // a copy of the portal left open for days keeps running old code (and old, heavier syncing). Check every few minutes
+  // whether a new version is live; reload when it's safe: the app is in the background, or nobody has touched it for 2 minutes,
+  // never with a box open, and only after everything is saved.
+  let lastInput=Date.now(); ["pointerdown","keydown","touchstart"].forEach(e=>addEventListener(e,()=>{ lastInput=Date.now(); },{passive:true,capture:true}));
+  async function verCheck(){
+    try{ const r=await fetch(location.pathname+"?vc="+Date.now(),{method:"HEAD",cache:"no-store"}); const v=r.ok&&(r.headers.get("etag")||r.headers.get("last-modified")); if(!v) return;
+      if(!verCheck.v) verCheck.v=v; else if(v!==verCheck.v) verCheck.stale=true; }catch(e){}
+  }
+  async function reloadIfStale(){
+    if(!verCheck.stale||reloadIfStale.busy||document.querySelector(".modal")) return; reloadIfStale.busy=true;
+    try{ if(woCtl&&woCtl.flush) await woCtl.flush(); await flushPush(); if(push.failed||sessionDead) return; location.reload(); }
+    catch(e){} finally{ reloadIfStale.busy=false; }
+  }
+  verCheck();
+  setInterval(async()=>{ await verCheck(); if(verCheck.stale&&(document.visibilityState==="hidden"||(Date.now()-lastInput>120000&&!woCtl))) reloadIfStale(); },5*60000);
+  document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="visible") verCheck().then(()=>{ if(verCheck.stale&&!woCtl) reloadIfStale(); }); });
   addEventListener("focus",()=>{ if(Date.now()-(catchUp.last||0)>5000){ catchUp.last=Date.now(); catchUp(); } });
   let hiddenAt=0;
   document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden"){ hiddenAt=Date.now(); if(woCtl&&woCtl.flush){ try{ woCtl.flush(); }catch(e){} } flushPush(); return; }
