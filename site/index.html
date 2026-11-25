@@ -369,6 +369,7 @@
   .page-head .eyebrow{font-size:11px;letter-spacing:.24em;text-transform:uppercase;color:var(--steel);font-weight:500;margin-bottom:4px}
 
   .pill{display:inline-flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;padding:3px 8px;background:var(--sub);color:var(--graphite);text-transform:uppercase;letter-spacing:.08em;white-space:nowrap;border:1px solid transparent}
+  .pill.sched{background:var(--ink);color:var(--paper,#fff)}
   .wocard .pill{white-space:normal;max-width:100%;text-align:left;line-height:1.35}
   .pill.red{background:var(--red);color:#fff}
   .pill.amber{background:var(--surface);color:var(--graphite);border-color:var(--hairline)}
@@ -2285,6 +2286,15 @@
   const vinHTML=v=>v?`${esc(String(v).slice(0,-8))}<b>${esc(String(v).slice(-8))}</b>`:"";
   const carImgOf=j=>{ const v=db.vehicles.find(x=>x.id===j.vehicleId); return (v&&v.photo)||""; };
   const jobNamesOf=j=>isWO(j)?jobGroups(j).map(g=>g.title):[j.title].filter(Boolean);
+  // scheduled time on a work order (j.time "HH:MM"): "Today 9:00 AM", "Tomorrow 1:30 PM", "Mon, Nov 30 9:00 AM"
+  function schedLabel(j){
+    if(!j||!j.time) return ""; const [h,m]=String(j.time).split(":").map(Number); if(isNaN(h)) return "";
+    const t=new Date(2000,0,1,h,m||0).toLocaleTimeString([],{hour:"numeric",minute:"2-digit"});
+    const d=j.date||todayStr(), tom=new Date(); tom.setDate(tom.getDate()+1);
+    const day=d===todayStr()?"Today":d===tom.toLocaleDateString("en-CA")?"Tomorrow":new Date(d+"T12:00").toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"});
+    return day+" "+t;
+  }
+  const schedPill=j=>j&&j.time&&!j.done&&!["completed","picked_up"].includes(j.status)?`<span class="pill sched">\u23f0 ${esc(schedLabel(j))}</span>`:"";
   function tjCardHTML(j){
     const car=carImgOf(j), key=keyPhotoOf(j), run=db.jobTime.find(s=>s.jobId===j.id&&!s.end), names=jobNamesOf(j);
     return `<button type="button" class="tjcard ${j.done?"done":""}" data-open="${j.id}">
@@ -2293,7 +2303,7 @@
         <div class="tj-veh">${esc(vehOf(j)||j.title||"Shop task")}</div>
         ${j.vin?`<div class="tj-vin mono">${vinHTML(j.vin)}</div>`:""}
         ${names.length?`<div class="tj-jobs">${names.slice(0,4).map(n=>`<span>${esc(n)}</span>`).join("")}${names.length>4?`<span>+${names.length-4} more</span>`:""}</div>`:""}
-        <div class="tj-st">${j.done?'<span class="pill green">Done</span>':run?`<span class="pill work">\u25cf ${esc(userName(run.userId))} working</span>`:isWO(j)?techStatusPill(j):""}${j.priority==="high"?'<span class="pill red">Urgent</span>':""}${me.role==="manager"?`<span class="muted" style="font-size:12px">${esc(crewNames(j))}</span>`:""}</div>
+        <div class="tj-st">${j.done?'<span class="pill green">Done</span>':run?`<span class="pill work">\u25cf ${esc(userName(run.userId))} working</span>`:isWO(j)?techStatusPill(j):""}${j.priority==="high"?'<span class="pill red">Urgent</span>':""}${schedPill(j)}${me.role==="manager"?`<span class="muted" style="font-size:12px">${esc(crewNames(j))}</span>`:""}</div>
       </div><span class="tj-go" aria-hidden="true">\u203a</span></button>`;
   }
   function viewJobs(){
@@ -5703,7 +5713,7 @@
     const er=(db.estimates||[]).filter(r=>r.wo_id===j.id).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)))[0];
     const tm=d=>new Date(d).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"});
     const apr=validApproval(j);
-    const tags=[ j.priority==="high"?'<span class="pill red">Urgent</span>':"", j.status==="estimate"&&woMissing(j)?'<span class="pill" style="background:var(--graphite);color:#fff">Write-up not finished</span>':"", showStatus&&!(j.status==="approved"&&apr)&&j.status!=="waiting_parts"?statusPill(j.status):"", j.status==="waiting_parts"?`<span class="pill red">${esc(waitLabel(j))}</span>`:"",
+    const tags=[ j.priority==="high"?'<span class="pill red">Urgent</span>':"", schedPill(j), j.status==="estimate"&&woMissing(j)?'<span class="pill" style="background:var(--graphite);color:#fff">Write-up not finished</span>':"", showStatus&&!(j.status==="approved"&&apr)&&j.status!=="waiting_parts"?statusPill(j.status):"", j.status==="waiting_parts"?`<span class="pill red">${esc(waitLabel(j))}</span>`:"",
       apr&&apr.own?'<span class="pill green">Shop car</span>':apr?'<span class="pill green">Approved</span>':lastApproval(j)?'<span class="pill red">New estimate not approved</span>':j.status==="estimate"?'<span class="pill red">Not approved</span>':"",
       run?`<span class="pill work">\u25cf ${esc([...new Set(runs.map(r=>userName(r.userId)))].join(", "))} working</span>`:"",
       er&&er.status==="declined"?`<span class="pill red">Customer declined estimate ${esc(tm(er.decided_at||er.created_at))}</span>`:!apr&&er&&er.status==="sent"&&(j.status==="estimate"||lastApproval(j))?(er.seen_at?`<span class="pill appr" style="background:var(--graphite)">Customer opened ${j.status==="estimate"?"":"revised "}estimate ${esc(tm(er.seen_at))}</span>`:`<span class="pill prog">${j.status==="estimate"?"Estimate":"Revised estimate"} sent ${esc(tm(er.created_at))}</span><span class="pill">Not opened yet</span>`):"" ].join("");
@@ -5782,6 +5792,7 @@
               <div class="two" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
                 <div><label>Priority</label><select id="wPri">${["high","normal","low"].map(p=>`<option value="${p}" ${p===j.priority?"selected":""}>${p==="high"?"Urgent":p[0].toUpperCase()+p.slice(1)}</option>`).join("")}</select></div>
                 <div><label>Work date</label><input id="wDate" type="date" value="${j.date}"></div>
+                <div><label>Time</label><input id="wTime" type="time" step="900" value="${esc(j.time||"")}"></div>
               </div>
             </div>
             </div>
@@ -5861,7 +5872,7 @@
       j._costs=j._costs||{...((db.woCosts||{})[j.id]||{})};
       if(newCust){ j._cName=v("#cName")?.trim(); j._cPhone=v("#cPhone")?.trim(); j._cEmail=v("#cEmail")?.trim(); const ct=$("#cTextOk"); if(ct) j._cTextOk=ct.checked; }
       Object.assign(j,{year:v("#vYear").trim(),make:v("#vMake").trim(),model:v("#vModel").trim(),vin:v("#vVin").replace(/\s/g,"").toUpperCase(),mileage:$("#vMiles")?odoVal($("#vMiles")):undefined,engine:(v("#vEngine")||"").trim(),plate:(v("#vPlate")||"").trim().toUpperCase(),
-        title:v("#wTitle").trim(),status:v("#wStatus"),assignee:v("#wTech"),techs:[...$("#view").querySelectorAll("[data-crew]")].filter(e=>e.checked&&e.dataset.crew!==v("#wTech")).map(e=>e.dataset.crew),priority:v("#wPri"),date:v("#wDate")||todayStr(),
+        title:v("#wTitle").trim(),status:v("#wStatus"),assignee:v("#wTech"),techs:[...$("#view").querySelectorAll("[data-crew]")].filter(e=>e.checked&&e.dataset.crew!==v("#wTech")).map(e=>e.dataset.crew),priority:v("#wPri"),date:v("#wDate")||todayStr(),time:v("#wTime")||"",
         notes:v("#wNotes").trim()});
       // match each box on screen to its line by the line's id, not its position: after a save drops an empty line
       // the positions shift, and matching by position wrote one line's boxes into another (wiping job names and hours)
