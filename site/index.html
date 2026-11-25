@@ -1208,6 +1208,35 @@
     for(const n of ["qty","min","price","rate","mins"]) if(typeof o[n]==="string") o[n]=Number(o[n]);
     return o;
   }
+  async function fetchAllQ(table,cols,f){
+    const out=[]; for(let from=0;;from+=1000){ const {data,error}=await f(sb.from(table).select(cols||"*")).range(from,from+999); if(error) throw error; out.push(...data); if(data.length<1000) break; }
+    return out;
+  }
+  // the server stamps updated_at on every change, so after the first load a device only downloads rows changed since
+  // last time, plus a short list of ids (to drop deleted rows). Copies are kept per person in IndexedDB.
+  const DELTA_TABLES=new Set(["work_orders","customers","vehicles","inventory","appointments","worksheets","estimate_requests","customer_links"]);
+  let deltaOK=null;
+  async function canDelta(){ if(deltaOK!==null) return deltaOK; try{ const {error}=await sb.from("estimate_requests").select("updated_at").limit(1); deltaOK=!error; }catch(e){ return false; } return deltaOK; }
+  const rcDB=()=>new Promise((res,rej)=>{ const r=indexedDB.open("citea-rows",1); r.onupgradeneeded=()=>r.result.createObjectStore("t"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); });
+  const rcGet=async k=>{ const d=await rcDB(); return new Promise(res=>{ const q=d.transaction("t").objectStore("t").get(k); q.onsuccess=()=>res(q.result||null); q.onerror=()=>res(null); }); };
+  const rcPut=async(k,v)=>{ const d=await rcDB(); return new Promise(res=>{ const tx=d.transaction("t","readwrite"); tx.objectStore("t").put(v,k); tx.oncomplete=res; tx.onerror=res; }); };
+  const tsMs=t=>Date.parse(String(t||"").replace(/(\.\d{3})\d+/,"$1"))||0;
+  async function fetchFresh(table,cols,key){
+    key=key||"id";
+    if(!me||!DELTA_TABLES.has(table)||!(await canDelta())) return fetchAll(table,cols);
+    const sel=cols?cols+",updated_at":"*", ck=`${me.id}|${table}|${sel}`;
+    let c=null; try{ c=await rcGet(ck); }catch(e){}
+    const store=async rows=>{ const m={}; let wm=0; rows.forEach(r=>{ m[r[key]]=r; const t=tsMs(r.updated_at); if(t>wm) wm=t; }); try{ await rcPut(ck,{wm,rows:m}); }catch(e){} return rows; };
+    if(!c||!c.wm||!c.rows) return store(await fetchAll(table,sel));
+    const since=new Date(c.wm-60000).toISOString();   // a minute of overlap for saves that were still finishing
+    const [ch,ids]=await Promise.all([fetchAllQ(table,sel,q=>q.gt("updated_at",since)), fetchAll(table,key)]);
+    const keep=new Set(ids.map(r=>r[key])), m=c.rows;
+    for(const k in m) if(!keep.has(k)) delete m[k];
+    ch.forEach(r=>{ m[r[key]]=r; });
+    const rows=Object.values(m); if(rows.length!==keep.size) return store(await fetchAll(table,sel));   // out of step: start over
+    return store(rows);
+  }
+  const fetchK=k=>fetchFresh(SPEC[k].table, k==="vehicles"?VEH_COLS_NO_PHOTO():null);
   async function fetchAll(table,cols){
     const out=[]; for(let from=0;;from+=1000){ const {data,error}=await sb.from(table).select(cols||"*").range(from,from+999); if(error) throw error; out.push(...data); if(data.length<1000) break; }
     return out;
@@ -1258,7 +1287,7 @@
   async function loadAll(){
     // everything at once (one round trip instead of a dozen one after another)
     const safe=(p,fb)=>p.catch(()=>fb);
-    const tables=ORDER.map(k=>k==="vehicles"?fetchAll("vehicles",VEH_COLS_NO_PHOTO()):fetchAll(SPEC[k].table));
+    const tables=ORDER.map(fetchK);
     const [, prof, vv, stRows, ...rest]=await Promise.all([loadRoles(), fetchAll("profiles"), fetchAll("video_views"), fetchAll("shop_settings"), ...tables]);
     const st=stRows[0]||{};
     const d={allUsers:prof.map(userFromProfile)}; d.users=d.allUsers.filter(u=>u.active);
@@ -1270,8 +1299,8 @@
     const none=Promise.resolve(null);
     const [pc, est, pay, punch, wsr, links, pays, qbo, woc, deals, pins]=await Promise.all([
       mgrLoad?fetchAll("part_costs"):Promise.resolve([]),
-      safe(fetchAll("estimate_requests",EST_COLS),[]), safe(fetchAll("team_pay"),[]), safe(fetchAll("punch_edits"),null), safe(fetchAll("worksheets"),[]),
-      mgrLoad?safe(fetchAll("customer_links"),[]):none, mgrLoad?safe(fetchAll("payments"),[]):none, mgrLoad?safe(fetchAll("qbo_links"),[]):none, mgrLoad?safe(fetchAll("wo_costs"),[]):none,
+      safe(fetchFresh("estimate_requests",EST_COLS),[]), safe(fetchAll("team_pay"),[]), safe(fetchAll("punch_edits"),null), safe(fetchFresh("worksheets",null,"wo_id"),[]),
+      mgrLoad?safe(fetchFresh("customer_links",null,"wo_id"),[]):none, mgrLoad?safe(fetchAll("payments"),[]):none, mgrLoad?safe(fetchAll("qbo_links"),[]):none, mgrLoad?safe(fetchAll("wo_costs"),[]):none,
       owner?safe(fetchAll("car_deals"),null):none, owner?safe(fetchAll("team_pins"),[]):none]);
     if(mgrLoad){ const m=Object.fromEntries((pc||[]).map(r=>[r.part_id,Number(r.cost)])); d.inventory.forEach(p=>{ if(m[p.id]!==undefined) p.cost=m[p.id]; }); }
     d.estimates=est||[];
@@ -1500,15 +1529,15 @@
       await flushPush();
       if(!sessionDead&&push.failed) await push();
       if(sessionDead||push.failed) return;   // keep this device's unsaved changes on screen; try again later
-      const rows=await Promise.all(ORDER.map(k=>k==="vehicles"?fetchAll("vehicles",VEH_COLS_NO_PHOTO()):fetchAll(SPEC[k].table)));
+      const rows=await Promise.all(ORDER.map(fetchK));
       ORDER.forEach((k,i)=>{ const tb=SPEC[k].table, ids=new Set(rows[i].map(r=>r.id));
         rows[i].forEach(r=>applyRemote({table:tb,eventType:"UPDATE",new:r,lite:k==="vehicles"}));
         [...((snap[k]||new Map()).keys())].filter(id=>!ids.has(id)).forEach(id=>applyRemote({table:tb,eventType:"DELETE",old:{id}})); });
-      try{ (await fetchAll("worksheets")).forEach(r=>{ const cur=(db.worksheets||{})[r.wo_id]; if(!cur||canonJ(cur.data)!==canonJ(r.data)) applyRemote({table:"worksheets",eventType:"UPDATE",new:r}); }); }catch(e){}
-      try{ db.estimates=await fetchAll("estimate_requests",EST_COLS); }catch(e){}
+      try{ (await fetchFresh("worksheets",null,"wo_id")).forEach(r=>{ const cur=(db.worksheets||{})[r.wo_id]; if(!cur||canonJ(cur.data)!==canonJ(r.data)) applyRemote({table:"worksheets",eventType:"UPDATE",new:r}); }); }catch(e){}
+      try{ db.estimates=await fetchFresh("estimate_requests",EST_COLS); }catch(e){}
       if(me.role==="manager"){
         try{ db.payments=await fetchAll("payments"); }catch(e){}
-        try{ const m={}; (await fetchAll("customer_links")).forEach(r=>{ m[r.wo_id]=r; }); db.custLinks=m; }catch(e){}
+        try{ const m={}; (await fetchFresh("customer_links",null,"wo_id")).forEach(r=>{ m[r.wo_id]=r; }); db.custLinks=m; }catch(e){}
         try{ const m={}; (await fetchAll("qbo_links")).forEach(r=>{ m[r.wo_id]=r; }); db.qboLinks=m; }catch(e){}
       }
       scheduleRender();
@@ -4024,7 +4053,9 @@
   async function publishPhotos(j, r){
     const ph=((((db.worksheets||{})[j.id]||{}).data||{}).photos||[]).filter(p=>p.kind!=="after").map(p=>p.path);
     let list=[];
-    if(ph.length){ const {data}=await sb.storage.from("ws-photos").createSignedUrls(ph,30*24*3600); list=(data||[]).filter(x=>x.signedUrl).map(x=>x.signedUrl); }
+    if(ph.length){ const {data}=await sb.storage.from("ws-photos").createSignedUrls([...ph,...ph.map(thumbPath)],30*24*3600);
+      const u={}; (data||[]).forEach(x=>{ if(x.signedUrl&&!x.error) u[x.path]=x.signedUrl; });
+      list=ph.filter(p=>u[p]).map(p=>u[thumbPath(p)]?{f:u[p],t:u[thumbPath(p)]}:u[p]); }
     const {error}=await sb.from("customer_links").update({photos:list}).eq("id",r.id); if(!error) r.photos=list;
   }
   function syncCustLink(){}   // kept for old callers: nothing reaches the customer until it's published
@@ -5266,8 +5297,7 @@
     const cur=(db.worksheets||{})[woId], data=JSON.parse(JSON.stringify((cur&&cur.data)||{}));
     data.items=data.items||{}; data.labor=data.labor||{}; data.photos=data.photos||[];
     for(const f of files){
-      const blob=await dataUrlToBlob(await shrinkImage(f,1280)), path=`${woId}/${uid()}.jpg`;
-      const {error}=await sb.storage.from("ws-photos").upload(path,blob,{contentType:"image/jpeg",cacheControl:"31536000"}); if(error) throw error;
+      const path=`${woId}/${uid()}.jpg`; await wsUploadPhoto(path,f);
       data.photos.push({path,kind:"before",by:me.id,at:Date.now()});
     }
     const live=db.jobs.find(x=>x.id===woId);
@@ -5646,7 +5676,7 @@
     const img = j._photo!==undefined ? j._photo : (v&&v.photo);
     const ph=((((db.worksheets||{})[j.id]||{}).data||{}).photos||[]).filter(p=>p.kind!=="after");
     return `<div class="veh-photo">${img?`<img src="${img}" alt="Vehicle photo">`:carSil}
-      ${ph.length?`<div class="veh-gal">${ph.map(p=>`<button type="button" class="vg" data-gal="${esc(p.path)}"><img alt="" data-wsp="${esc(p.path)}" src="${wsSignedUrls[p.path]||""}"></button>`).join("")}</div>
+      ${ph.length?`<div class="veh-gal">${ph.map(p=>`<button type="button" class="vg" data-gal="${esc(p.path)}"><img alt="" data-wsp="${esc(p.path)}" src="${wsThumbUrls[p.path]||wsSignedUrls[p.path]||""}"></button>`).join("")}</div>
         <div class="veh-gal-note">${ph.length} photo${ph.length>1?"s":""} \u00b7 shown to the customer on their portal \u00b7 tap one to make it the main photo</div>`:""}
       <div class="veh-photo-bar"><button class="btn scanbig dark" id="vCam" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>Take photos</button>
         ${img?'<button class="btn ghost sm" id="vPhotoDel" type="button">Remove main photo</button>':""}</div></div>`;
@@ -5654,7 +5684,8 @@
   async function fillGallery(){
     const imgs=[...document.querySelectorAll("img[data-wsp]")], need=imgs.map(i=>i.dataset.wsp).filter(p=>!wsSignedUrls[p]);
     if(need.length){ const {data}=await sb.storage.from("ws-photos").createSignedUrls([...new Set(need)],PH_TTL); (data||[]).forEach(x=>{ if(x.signedUrl) wsSignedUrls[x.path]=x.signedUrl; }); rememberLinks(data||[]); }
-    imgs.forEach(i=>{ if(wsSignedUrls[i.dataset.wsp]) i.src=wsSignedUrls[i.dataset.wsp]; });
+    try{ await wsThumbsFor(imgs.map(i=>i.dataset.wsp)); }catch(e){}
+    imgs.forEach(i=>{ if(wsSignedUrls[i.dataset.wsp]) i.src=wsThumbUrls[i.dataset.wsp]||wsSignedUrls[i.dataset.wsp]; });
   }
   // shrink a phone photo so it fits comfortably in browser storage
   // photos are resized and compressed on the phone before upload to save space:
@@ -6277,7 +6308,7 @@
     const nt=$("#wsNotes"); if(nt) nt.oninput=()=>{ D().notes=nt.value; wsSave(); };
     $("#view").querySelectorAll(".ws input, .ws textarea").forEach(e=>e.addEventListener("blur",()=>{ if(wsData&&wsData._pending){ const p=wsData._pending; setTimeout(()=>wsRemote(p),50); } }));
     $("#view").querySelectorAll("[data-wsadd]").forEach(inp=>inp.onchange=async()=>{ const kind=inp.dataset.wsadd; for(const f of inp.files){ await wsAddPhoto(j,f,kind); } });
-    $("#view").querySelectorAll("[data-wsdel]").forEach(b=>b.onclick=()=>{ D().photos=D().photos.filter(p=>p.path!==b.dataset.wsdel); wsSave(); renderWorksheetKeep(); sb.storage.from("ws-photos").remove([b.dataset.wsdel]); });
+    $("#view").querySelectorAll("[data-wsdel]").forEach(b=>b.onclick=()=>{ D().photos=D().photos.filter(p=>p.path!==b.dataset.wsdel); wsSave(); renderWorksheetKeep(); sb.storage.from("ws-photos").remove([b.dataset.wsdel,thumbPath(b.dataset.wsdel)]); });
     preBind(); wsLoadThumbs();
   }
   // ---- pre-repair inspection & test drive: the car's condition when we received it, before any work
@@ -6376,18 +6407,42 @@
     return `<div class="card"><div class="card-head"><h2>${title}</h2><span class="spacer"></span>${can?`<label class="btn ghost sm" style="margin:0;cursor:pointer">+ Add photos<input type="file" accept="image/*" multiple data-wsadd="${kind}" hidden></label>`:""}</div>
       ${list.length?`<div class="ws-photos">${list.map(p=>`<figure><a target="_blank" rel="noopener" data-wsimg="${esc(p.path)}"><img data-wsthumb="${esc(p.path)}" alt=""></a>${can?`<button class="x" data-wsdel="${esc(p.path)}" type="button" aria-label="Remove">\u00d7</button>`:""}</figure>`).join("")}</div>`:'<div class="muted" style="font-size:13px">No photos yet.</div>'}</div>`;
   }
+  // small copies of worksheet photos (~20 KB instead of ~250 KB) for grids and the customer page; the full photo
+  // loads only when someone opens it. Photos from before this have their small copy made by a manager's device.
+  const thumbPath=p=>String(p).replace(/\.jpe?g$/i,"")+"_t.jpg";
+  const wsThumbUrls={};
+  async function wsThumbsFor(paths){
+    const need=[...new Set(paths)].filter(p=>!(p in wsThumbUrls)); if(!need.length) return;
+    const tp=need.map(thumbPath).filter(t=>!wsSignedUrls[t]);
+    if(tp.length){ const {data}=await sb.storage.from("ws-photos").createSignedUrls(tp,PH_TTL); const ok=(data||[]).filter(x=>x.signedUrl&&!x.error); ok.forEach(x=>{ wsSignedUrls[x.path]=x.signedUrl; }); rememberLinks(ok); }
+    need.forEach(p=>{ wsThumbUrls[p]=wsSignedUrls[thumbPath(p)]||null; if(!wsThumbUrls[p]) thumbLater(p); });
+  }
+  async function wsUploadPhoto(path,file){
+    const blob=await dataUrlToBlob(await shrinkImage(file,1280));
+    const {error}=await sb.storage.from("ws-photos").upload(path,blob,{contentType:"image/jpeg",cacheControl:"31536000"}); if(error) throw error;
+    try{ const t=await dataUrlToBlob(await shrinkImage(file,360,0.6)); await sb.storage.from("ws-photos").upload(thumbPath(path),t,{contentType:"image/jpeg",cacheControl:"31536000"}); }catch(e){}
+  }
+  const thumbQ=new Set(); let thumbBusy=false;
+  function thumbLater(p){ if(!me||me.role!=="manager") return; thumbQ.add(p); if(!thumbBusy) setTimeout(thumbRun,4000); }
+  async function thumbRun(){
+    if(thumbBusy||!thumbQ.size) return; thumbBusy=true;
+    try{ let n=0; for(const p of [...thumbQ]){ if(n++>=8) break; thumbQ.delete(p);
+        const {data:bl,error}=await sb.storage.from("ws-photos").download(p); if(error||!bl) continue;
+        const t=await dataUrlToBlob(await shrinkImage(new File([bl],"t.jpg",{type:"image/jpeg"}),360,0.6));
+        const up=await sb.storage.from("ws-photos").upload(thumbPath(p),t,{contentType:"image/jpeg",cacheControl:"31536000"});
+        if(!up.error||/exists/i.test(up.error.message||"")) delete wsThumbUrls[p]; } }
+    catch(e){} finally{ thumbBusy=false; if(thumbQ.size) setTimeout(thumbRun,60000); }
+  }
   async function wsLoadThumbs(){
     const els=[...document.querySelectorAll("[data-wsthumb]")], need=els.map(e=>e.dataset.wsthumb).filter(p=>!wsSignedUrls[p]);
     if(need.length){ const {data}=await sb.storage.from("ws-photos").createSignedUrls(need,PH_TTL); (data||[]).forEach(x=>{ if(x.signedUrl) wsSignedUrls[x.path]=x.signedUrl; }); rememberLinks(data||[]); }
-    els.forEach(e=>{ const u=wsSignedUrls[e.dataset.wsthumb]; if(u){ e.src=u; e.parentElement.href=u; } });
+    try{ await wsThumbsFor(els.map(e=>e.dataset.wsthumb)); }catch(e){}
+    els.forEach(e=>{ const u=wsSignedUrls[e.dataset.wsthumb]; if(u){ e.src=wsThumbUrls[e.dataset.wsthumb]||u; e.parentElement.href=u; } });
   }
   async function wsAddPhoto(j,file,kind){
     toast("Uploading photo\u2026");
     try{
-      const blob=await dataUrlToBlob(await shrinkImage(file,1280));
-      const path=`${j.id}/${uid()}.jpg`;
-      const {error}=await sb.storage.from("ws-photos").upload(path,blob,{contentType:"image/jpeg",cacheControl:"31536000"});
-      if(error) throw error;
+      const path=`${j.id}/${uid()}.jpg`; await wsUploadPhoto(path,file);
       wsData.photos.push({path,kind,by:me.id,at:Date.now()}); wsSave(true); renderWorksheetKeep();
     }catch(e){ toast("Couldn't upload: "+(e.message||e)); }
   }
