@@ -536,7 +536,7 @@
   // receipt for the customer to save as a PDF or print: jobs, parts, labor, photos, then our terms & policies
   function receiptHTML(d){
     const s=d.snapshot||{}, done=d.stage==="invoice", ap=d.approval, pct=Number((d.pay||{}).cash_discount_pct||0);
-    const ph=(d.photos||[]).slice(0,12);
+    const ph=(d.photos||[]).slice(0,12).map(phT);
     const extra=`${preRcHTML(d.pre)}${inspHTML(d,true)}${ap?`<div class="rc-appr">Estimate approved and signed${ap.signer?" by "+esc(ap.signer):""}${ap.at?" on "+esc(fmtWhen(ap.at)):""}.</div>`:""}
       ${ph.length?`<div class="rc-ph"><div class="band">Photos of your vehicle</div><div class="rc-gal">${ph.map(u=>`<img src="${esc(u)}" alt="">`).join("")}</div></div>`:""}
 `;
@@ -587,7 +587,9 @@
   // tapping a photo of your car opens a swipeable viewer instead of a new tab
   document.addEventListener("click",e=>{ const l=e.target.closest&&e.target.closest(".gal a"); if(!l||e.metaKey||e.ctrlKey) return;
     e.preventDefault(); const links=[...l.closest(".gal").querySelectorAll("a")]; lightbox(links.map(x=>x.getAttribute("href")), links.indexOf(l)); },true);
-  const photosHTML=d=>(d.photos||[]).length?`<h2>Photos of your car</h2><section><div class="card"><div class="gal">${d.photos.map(u=>`<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="Photo of your vehicle" loading="lazy"></a>`).join("")}</div>
+  // a photo is a link, or {f: full size, t: small copy}
+  const phF=u=>typeof u=="string"?u:(u&&u.f)||"", phT=u=>typeof u=="string"?u:(u&&(u.t||u.f))||"";
+  const photosHTML=d=>(d.photos||[]).length?`<h2>Photos of your car</h2><section><div class="card"><div class="gal">${d.photos.map(u=>`<a href="${esc(phF(u))}" target="_blank" rel="noopener"><img src="${esc(phT(u))}" alt="Photo of your vehicle" loading="lazy"></a>`).join("")}</div>
       <div class="hint" style="margin-top:8px">Taken at check-in. Tap a photo to see it full size.</div></div></section>`:"";
   const smsHTML=d=>`<section><div class="card smsbox"><label class="agree smsok" style="margin:0"><input type="checkbox" id="smsToggle" ${d.sms_ok?"checked":""}> Text me updates about this repair${(d.snapshot||{}).phone?" at "+esc(d.snapshot.phone):""}.</label>
       <div class="hint" style="margin:4px 0 0 30px" id="smsMsg">${d.sms_ok?"You're signed up for text updates.":"Optional. Msg &amp; data rates may apply. Reply STOP any time to stop."}</div></div></section>`;
