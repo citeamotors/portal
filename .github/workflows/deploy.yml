@@ -34,6 +34,7 @@ jobs:
           done
           if [ -f CNAME ]; then cp CNAME site/CNAME; fi
           sha256sum site/*.html
+          sha256sum site/index.html | cut -c1-16 > site/version.txt
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
