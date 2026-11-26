@@ -1578,11 +1578,12 @@
   // never with a box open, and only after everything is saved.
   let lastInput=Date.now(); ["pointerdown","keydown","touchstart"].forEach(e=>addEventListener(e,()=>{ lastInput=Date.now(); },{passive:true,capture:true}));
   async function verCheck(){
-    try{ const r=await fetch(location.pathname+"?vc="+Date.now(),{method:"HEAD",cache:"no-store"}); const v=r.ok&&(r.headers.get("etag")||r.headers.get("last-modified")); if(!v) return;
+    // version.txt holds a fingerprint of this page, written at deploy (headers differ between GitHub's servers, so they can't be trusted)
+    try{ const r=await fetch("version.txt?vc="+Date.now(),{cache:"no-store"}); const v=r.ok&&(await r.text()).trim(); if(!v||v.length>80) return;
       if(!verCheck.v) verCheck.v=v; else if(v!==verCheck.v) verCheck.stale=true; }catch(e){}
   }
   async function reloadIfStale(){
-    if(!verCheck.stale||reloadIfStale.busy||document.querySelector(".modal")) return; reloadIfStale.busy=true;
+    if(!verCheck.stale||reloadIfStale.busy||document.querySelector(".modal")||bank.linkOpen||document.querySelector('iframe[id^="plaid-link"]')) return; reloadIfStale.busy=true;
     try{ if(woCtl&&woCtl.flush) await woCtl.flush(); await flushPush(); if(push.failed||sessionDead) return; location.reload(); }
     catch(e){} finally{ reloadIfStale.busy=false; }
   }
@@ -3409,10 +3410,11 @@
   function loadPlaidJs(){ return window.Plaid?Promise.resolve():new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"; sc.onload=res; sc.onerror=()=>rej(new Error("Couldn't load Plaid")); document.head.appendChild(sc); }); }
   async function connectBank(){
     try{ const [{link_token}]=await Promise.all([plaidCall("link_token"),loadPlaidJs()]);
-      const h=window.Plaid.create({token:link_token, onSuccess:async(public_token,meta)=>{ toast("Connecting\u2026");
+      bank.linkOpen=true;
+      const h=window.Plaid.create({token:link_token, onSuccess:async(public_token,meta)=>{ bank.linkOpen=false; toast("Connecting\u2026");
           try{ const r=await plaidCall("exchange",{public_token,institution:(meta&&meta.institution&&meta.institution.name)||""}); toast(`Connected \u2014 ${r.added||0} transactions so far. More can take a few minutes.`); await loadBank(); viewReports(); }
           catch(e){ toast("Couldn't finish connecting: "+e.message); } },
-        onExit:(err)=>{ if(err) toast(err.display_message||err.error_message||"Bank connection closed"); }});
+        onExit:(err)=>{ bank.linkOpen=false; if(err) toast(err.display_message||err.error_message||"Bank connection closed"); }});
       h.open(); }
     catch(e){ toast(e.message); }
   }
