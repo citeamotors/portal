@@ -402,6 +402,12 @@
   tr.click:hover td{background:var(--paper)}
 
   /* stats strip */
+  .bk-item{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;padding:10px 0;border-top:1px solid var(--line,#ddd)}.bk-item:first-of-type{border-top:0}.bk-item small{display:block;color:var(--steel);font-size:12px}
+  .bk-acct{display:flex;justify-content:space-between;gap:20px;font-size:13.5px;min-width:260px}
+  .bk-row{display:grid;grid-template-columns:1fr auto 190px auto 230px;gap:8px;align-items:center;padding:10px 0;border-top:1px solid var(--line,#ddd)}
+  .bk-row .bk-l{min-width:0}.bk-row .bk-l small{display:block;color:var(--steel);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bk-amt{font-weight:700}
+  .bk-row select{padding:6px 8px;font-size:13px}.bk-rem{grid-column:3/6;font-size:12.5px;color:var(--steel);display:flex;gap:6px;align-items:center;margin:0;text-transform:none;letter-spacing:0;font-weight:400}.bk-rem input{width:auto;margin:0}.bk-skip{display:flex;gap:6px}.bk-skip select{flex:1;min-width:0}.bk-hint{grid-column:1/3;font-size:12px;color:#C8201F}
+  @media (max-width:760px){ .bk-row{grid-template-columns:1fr auto}.bk-row select,.bk-row .btn{grid-column:1/-1}.bk-rem,.bk-hint{grid-column:1/-1} }
   .pl-verdict{display:flex;flex-direction:column;gap:2px;padding:18px 20px;margin-top:14px;border-left:6px solid #1E7F4F}.pl-verdict.loss{border-left-color:#C8201F}
   .pl-verdict span{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--steel)}.pl-verdict b{font:700 34px/1.1 'JetBrains Mono',monospace;color:#1E7F4F}.pl-verdict.loss b{color:#C8201F}.pl-verdict small{color:var(--steel);font-size:13px}
   .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:16px;border:1px solid var(--hairline);background:var(--surface)}
@@ -3382,7 +3388,117 @@
   // ---------------- Accounting (owners): shop expenses outside of repairs, and profit & loss ----------------
   const EXP_CATS=["Rent","Utilities","Insurance","Software & subscriptions","Tools & equipment","Shop supplies","Marketing & advertising","Vehicles & fuel","Building repairs & maintenance","Licenses, permits & fees","Bank & card fees","Professional services","Office","Meals","Taxes","Other"];
   let expenses=null;
-  async function loadExpenses(){ loadExpenses.busy=true; try{ const {data,error}=await sb.from("expenses").select("*").order("date",{ascending:false}); if(error) throw error; expenses=data||[]; } finally{ loadExpenses.busy=false; } return expenses; }
+  async function loadExpenses(){ loadExpenses.busy=true; try{ const {data,error}=await sb.from("expenses").select("*").order("date",{ascending:false}); if(error) throw error; expenses=data||[]; await loadBank(); } finally{ loadExpenses.busy=false; } return expenses; }
+  // ---- bank and card transactions through Plaid (read-only). The server function keeps the bank tokens.
+  let bank={status:null,accounts:[],review:[],rules:[],busy:false,syncedAt:0};
+  async function plaidCall(action,body){ const {data,error}=await sb.functions.invoke("plaid",{body:{action,...(body||{})}}); if(error) throw new Error(error.message||"Couldn't reach the bank connection"); if(data&&data.error) throw new Error(data.error); return data; }
+  async function loadBank(){
+    try{ bank.status=await plaidCall("status"); }catch(e){ bank.status={error:e.message}; return; }
+    const [a,t,r]=await Promise.all([sb.from("bank_accounts").select("*"),sb.from("bank_txns").select("*").eq("status","new").order("date",{ascending:false}).limit(500),sb.from("bank_rules").select("*")]);
+    bank.accounts=a.data||[]; bank.review=t.data||[]; bank.rules=r.data||[];
+    // pull new transactions when the tab opens, at most every 6 hours
+    if(bank.status.keys&&(bank.status.items||[]).length&&!bank.busy){ const last=Math.max(0,...bank.status.items.map(i=>Date.parse(i.last_sync||0)||0)); if(Date.now()-last>6*3600000) bankSync(true); }
+  }
+  async function bankSync(quiet){
+    if(bank.busy) return; bank.busy=true; if(tab==="reports") viewReports();
+    try{ const r=await plaidCall("sync"); await loadBank(); const {data}=await sb.from("expenses").select("*").order("date",{ascending:false}); if(data) expenses=data;
+      if(!quiet||r.added||r.ruled) toast(`Bank synced \u2014 ${r.added||0} new transaction${r.added===1?"":"s"}${r.ruled?`, ${r.ruled} sorted by your rules`:""}`); if(r.errors&&r.errors.length) toast(r.errors[0]); }
+    catch(e){ if(!quiet) toast("Bank sync: "+e.message); }
+    finally{ bank.busy=false; if(tab==="reports") viewReports(); }
+  }
+  function loadPlaidJs(){ return window.Plaid?Promise.resolve():new Promise((res,rej)=>{ const sc=document.createElement("script"); sc.src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"; sc.onload=res; sc.onerror=()=>rej(new Error("Couldn't load Plaid")); document.head.appendChild(sc); }); }
+  async function connectBank(){
+    try{ const [{link_token}]=await Promise.all([plaidCall("link_token"),loadPlaidJs()]);
+      const h=window.Plaid.create({token:link_token, onSuccess:async(public_token,meta)=>{ toast("Connecting\u2026");
+          try{ const r=await plaidCall("exchange",{public_token,institution:(meta&&meta.institution&&meta.institution.name)||""}); toast(`Connected \u2014 ${r.added||0} transactions so far. More can take a few minutes.`); await loadBank(); viewReports(); }
+          catch(e){ toast("Couldn't finish connecting: "+e.message); } },
+        onExit:(err)=>{ if(err) toast(err.display_message||err.error_message||"Bank connection closed"); }});
+      h.open(); }
+    catch(e){ toast(e.message); }
+  }
+  function plaidKeysModal(){
+    modal(`<h2>Plaid keys</h2><p class="muted" style="margin-top:0">From dashboard.plaid.com \u203a Developers \u203a Keys. They're saved on the server and never shown again.</p>
+      <label>Client ID</label><input id="pkId" autocomplete="off" spellcheck="false">
+      <label>Secret</label><input id="pkSec" type="password" autocomplete="off">
+      <label>Environment</label><select id="pkEnv"><option value="production">Production (your real bank)</option><option value="sandbox">Sandbox (test data)</option></select>
+      <p class="err" id="pkErr"></p><div class="row end"><button class="btn ghost" data-close type="button">Cancel</button><button class="btn" id="pkOk" type="button">Save</button></div>`, root=>{
+      const q=x=>root.querySelector(x);
+      q("#pkOk").onclick=async()=>{ q("#pkOk").disabled=true; try{ await plaidCall("save_keys",{client_id:q("#pkId").value,secret:q("#pkSec").value,env:q("#pkEnv").value}); closeModal(); toast("Plaid keys saved"); await loadBank(); viewReports(); }
+        catch(e){ q("#pkErr").textContent=e.message; q("#pkOk").disabled=false; } };
+    });
+  }
+  // a first guess at the category from the merchant and Plaid's category
+  const IGNORE_WHY=["Team pay","Parts for a repair","Transfer between our accounts","Owner draw / personal","Refund or return","Other"];
+  function bankGuess(t){
+    const n=((t.merchant||"")+" "+(t.name||"")).toLowerCase(), c=String(t.pfc||"");
+    const rule=bank.rules.find(r=>r.match&&n.includes(String(r.match).toLowerCase())); if(rule) return rule.action==="ignore"?{ignore:true}:{cat:rule.category};
+    if(/zelle|venmo|cash app|paypal \*?transfer/.test(n)&&!/zelle.*(refund)/.test(n)) return {ignore:true,why:"Team pay"};
+    if(/o.?reilly|autozone|napa|rockauto|advance auto|carquest|worldpac|partstech|lkq|tesla parts|dealer parts/.test(n)) return {ignore:true,why:"Parts for a repair"};
+    if(/google|adobe|microsoft|github|supabase|zoho|intuit|quickbooks|godaddy|openai|anthropic|claude|mitchell|alldata|identifix|cloudflare|apple\.com|square/.test(n)) return {cat:/square/.test(n)?"Bank & card fees":"Software & subscriptions"};
+    if(/RENT_AND_UTILITIES_RENT/.test(c)) return {cat:"Rent"};
+    if(/RENT_AND_UTILITIES/.test(c)) return {cat:"Utilities"};
+    if(/INSURANCE/.test(c)) return {cat:"Insurance"};
+    if(/TRANSPORTATION|GAS/.test(c)) return {cat:"Vehicles & fuel"};
+    if(/FOOD_AND_DRINK/.test(c)) return {cat:"Meals"};
+    if(/BANK_FEES/.test(c)) return {cat:"Bank & card fees"};
+    if(/TAX_PAYMENT/.test(c)) return {cat:"Taxes"};
+    if(/GOVERNMENT/.test(c)) return {cat:"Licenses, permits & fees"};
+    if(/ACCOUNTING|LEGAL|CONSULTING/.test(c)) return {cat:"Professional services"};
+    if(/HOME_IMPROVEMENT|HARDWARE/.test(c)) return {cat:"Tools & equipment"};
+    if(/GENERAL_MERCHANDISE/.test(c)) return {cat:"Shop supplies"};
+    if(/ADVERTISING|MARKETING/.test(c)) return {cat:"Marketing & advertising"};
+    return {cat:"Other"};
+  }
+  async function bankDecide(t,choice,remember){
+    const acct=bank.accounts.find(a=>a.account_id===t.account_id)||{}, who=(t.merchant||t.name||"").trim();
+    try{
+      if(choice.ignore){ const r=await sb.from("bank_txns").update({status:"ignored",note:choice.why||"Not an expense"}).eq("id",t.id); if(r.error) throw r.error; }
+      else{ const r=await sb.from("expenses").insert({date:t.date,amount:Math.abs(Number(t.amount)),category:choice.cat,vendor:who.slice(0,120),description:t.merchant?String(t.name||"").slice(0,200):"",method:acct.type==="credit"?"Card":"Bank / ACH",bank_txn_id:t.id}).select().single();
+        if(r.error) throw r.error; expenses=(expenses||[]).concat(r.data).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+        const u=await sb.from("bank_txns").update({status:"expense",category:choice.cat,expense_id:r.data.id}).eq("id",t.id); if(u.error) throw u.error; }
+      bank.review=bank.review.filter(x=>x.id!==t.id);
+      if(remember&&who){ const m=(t.merchant||who).toLowerCase().replace(/\s+#?\d[\d\s-]*$/,"").trim().slice(0,60);
+        if(m.length>=3&&!bank.rules.some(r=>r.match===m)){ const r=await sb.from("bank_rules").insert({match:m,action:choice.ignore?"ignore":"expense",category:choice.ignore?null:choice.cat}).select().single(); if(!r.error&&r.data) bank.rules.push(r.data);
+          const more=bank.review.filter(x=>!x.pending&&((x.merchant||"")+" "+(x.name||"")).toLowerCase().includes(m)); for(const x of more) await bankDecide(x,choice,false); } }
+    }catch(e){ toast("Couldn't save: "+(e.message||e)); }
+  }
+  function bankHTML(){
+    const st=bank.status, dd=d=>new Date(d+"T12:00").toLocaleDateString([],{month:"short",day:"numeric"});
+    if(!st) return "";
+    if(st.error) return `<div class="card rep-card" style="margin-top:14px"><h2 style="margin:0 0 6px">Bank &amp; cards</h2><div class="muted">${esc(st.error)}</div></div>`;
+    const acctLbl=id=>{ const a=bank.accounts.find(x=>x.account_id===id); return a?`${esc(a.name||a.subtype)} \u00b7\u00b7${esc(a.mask)}`:""; };
+    const head=`<div class="row" style="margin-bottom:8px;gap:8px;flex-wrap:wrap"><h2 style="margin:0">Bank &amp; cards</h2><span class="spacer"></span>
+      ${st.keys?`<button class="btn ghost sm" id="bkSync" type="button" ${bank.busy?"disabled":""}>${bank.busy?"Syncing\u2026":"Sync now"}</button><button class="btn sm" id="bkConn" type="button">+ Connect a bank or card</button>`:`<button class="btn sm" id="bkKeys" type="button">Add Plaid keys</button>`}</div>`;
+    if(!st.keys) return `<div class="card rep-card" style="margin-top:14px">${head}<div class="muted">Connect Bank of America and your credit cards to pull in every charge automatically. Read-only: the portal can see transactions but can't move money. First add the keys from your Plaid account.</div></div>`;
+    const items=st.items||[];
+    const accts=items.map(it=>`<div class="bk-item"><div><b>${esc(it.institution||"Bank")}</b>${it.error?` <span class="pill red">${/ITEM_LOGIN_REQUIRED/.test(it.error)?"Sign in again":"Error"}</span>`:""}<small>${it.last_sync?"Synced "+new Date(it.last_sync).toLocaleString([],{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}):"Not synced yet"}</small>
+        ${bank.accounts.filter(a=>a.item_id===it.item_id).map(a=>`<div class="bk-acct"><span>${esc(a.name||a.subtype)} \u00b7\u00b7${esc(a.mask)}</span><span class="mono">${a.balance!=null?money(Number(a.balance)):""}</span></div>`).join("")}</div>
+        <button class="btn ghost sm" data-bkrm="${esc(it.item_id)}" type="button">Disconnect</button></div>`).join("")||'<div class="muted">No accounts connected yet.</div>';
+    const rv=bank.review.filter(t=>!t.pending);
+    const rows=rv.slice(0,60).map(t=>{ const g=bankGuess(t);
+      return `<div class="bk-row" data-bkt="${esc(t.id)}"><div class="bk-l"><b>${esc(t.merchant||t.name)}</b><small>${dd(t.date)} \u00b7 ${acctLbl(t.account_id)}${t.merchant?` \u00b7 ${esc(t.name)}`:""}</small></div>
+        <span class="mono bk-amt">${money(Number(t.amount))}</span>
+        <select class="bk-cat">${EXP_CATS.map(c=>`<option ${(g.ignore?c==="Other":g.cat===c)?"selected":""}>${esc(c)}</option>`).join("")}</select>
+        <button class="btn sm" data-bkadd type="button">Add expense</button>
+        <span class="bk-skip"><select class="bk-ign">${IGNORE_WHY.map(w=>`<option ${(g.ignore?(g.why||"Other"):"Other")===w?"selected":""}>${esc(w)}</option>`).join("")}</select><button class="btn ghost sm" data-bkskip type="button">Skip</button></span>
+        <label class="bk-rem"><input type="checkbox"><span>Always do this for ${esc(t.merchant||t.name)}</span></label>
+        ${g.ignore?`<div class="bk-hint">Looks like: ${esc(g.why||"not an expense")}</div>`:""}</div>`; }).join("");
+    return `<div class="card rep-card" style="margin-top:14px">${head}${accts}</div>
+      <div class="card rep-card" style="margin-top:14px"><div class="row" style="margin-bottom:6px"><h2 style="margin:0">To review${rv.length?` (${rv.length})`:""}</h2></div>
+        ${rv.length?`<div class="muted" style="font-size:13px;margin-bottom:8px">Money that left the bank or went on a card. Add the shop's costs as expenses; skip team pay, repair parts (already counted on work orders) and transfers. Tick "Always do this" and that payee is handled automatically from then on.</div>${rows}${rv.length>60?`<div class="muted" style="margin-top:8px">Showing the newest 60.</div>`:""}`:'<div class="muted">All caught up.</div>'}</div>`;
+  }
+  function bindBank(){
+    const v=$("#view");
+    const k=$("#bkKeys"); if(k) k.onclick=plaidKeysModal;
+    const c=$("#bkConn"); if(c) c.onclick=connectBank;
+    const sy=$("#bkSync"); if(sy) sy.onclick=()=>bankSync(false);
+    v.querySelectorAll("[data-bkrm]").forEach(b=>b.onclick=async()=>{ if(b.dataset.sure!=="1"){ b.dataset.sure="1"; b.textContent="Tap again to disconnect"; return; }
+      try{ await plaidCall("remove",{item_id:b.dataset.bkrm}); toast("Disconnected"); await loadBank(); viewReports(); }catch(e){ toast(e.message); } });
+    v.querySelectorAll("[data-bkt]").forEach(row=>{ const t=bank.review.find(x=>x.id===row.dataset.bkt); if(!t) return; const rem=()=>row.querySelector(".bk-rem input").checked;
+      row.querySelector("[data-bkadd]").onclick=async()=>{ row.style.opacity=".4"; await bankDecide(t,{cat:row.querySelector(".bk-cat").value},rem()); viewReports(); };
+      row.querySelector("[data-bkskip]").onclick=async()=>{ row.style.opacity=".4"; await bankDecide(t,{ignore:true,why:row.querySelector(".bk-ign").value},rem()); viewReports(); };
+    });
+  }
   // the dates an expense is charged between a and b: once, or on the same day every month (until its end month)
   function expHits(e,a,b){
     const d0=new Date(e.date+"T12:00"), out=[];
@@ -3447,7 +3563,7 @@
     const total=r2(hits.reduce((x,h)=>x+Number(h.e.amount||0),0)), byCat={}; hits.forEach(h=>{ byCat[h.e.category]=r2((byCat[h.e.category]||0)+Number(h.e.amount||0)); });
     const bills=expenses.filter(e=>e.repeat==="monthly"&&(!e.repeat_until||e.repeat_until>=todayStr())), perMonth=r2(bills.reduce((x,e)=>x+Number(e.amount||0),0));
     const dd=t=>new Date(t).toLocaleDateString([],{month:"short",day:"numeric",year:"numeric"});
-    return `<div class="row no-print" style="margin:4px 0 0;gap:8px"><span class="muted">Rent, utilities, insurance, tools, software \u2014 anything the shop pays for outside of customer repairs. Team pay and repair parts are already counted from timesheets and work orders.</span><span class="spacer"></span>${add}</div>
+    return bankHTML()+`<div class="row no-print" style="margin:14px 0 0;gap:8px"><span class="muted">Rent, utilities, insurance, tools, software \u2014 anything the shop pays for outside of customer repairs. Team pay and repair parts are already counted from timesheets and work orders.</span><span class="spacer"></span>${add}</div>
       <div class="stats rep-kpis"><div class="stat"><b>${money(total)}</b><span>Expenses \u00b7 ${esc(R.label)}</span></div><div class="stat"><b>${money(perMonth)}</b><span>Monthly bills (${bills.length})</span></div><div class="stat"><b>${hits.length}</b><span>Charges</span></div></div>`
       +card("By category", tbl([["Category"],["Amount","num"],["Share","num"]], Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([c,v])=>trow([esc(c),[money(v)],[total?Math.round(v/total*100)+"%":"\u2013"]])),
         total?trow(["<b>Total</b>",[`<b>${money(total)}</b>`],""]):""))
@@ -3703,6 +3819,7 @@
     const rf=$("#repFrom"), rt=$("#repTo"); if(rf) rf.onchange=()=>{ viewReports.from=rf.value; if(viewReports.to<rf.value) viewReports.to=rf.value; viewReports(); }; if(rt) rt.onchange=()=>{ viewReports.to=rt.value; viewReports(); };
     $("#view").querySelectorAll("[data-rec]").forEach(b=>b.onclick=()=>approvalRecord(b.dataset.rec));
     $("#view").querySelectorAll("[data-deal]").forEach(b=>b.onclick=()=>editCarDeal(b.dataset.deal));
+    if(fin&&cat==="expenses") bindBank();
     $("#view").querySelectorAll("[data-exp]").forEach(b=>b.onclick=()=>editExpense(b.dataset.exp?(expenses||[]).find(e=>e.id===b.dataset.exp):null, ()=>viewReports()));
     const aq=$("#apprQ"); if(aq) aq.oninput=()=>{ const q=aq.value.trim().toLowerCase(); $("#view").querySelectorAll("[data-apc]").forEach(d=>{ d.style.display=!q||d.dataset.apc.includes(q)?"":"none"; if(q) d.open=true; }); };
     // CSV of any report table (opens in Excel / Google Sheets / QuickBooks)
