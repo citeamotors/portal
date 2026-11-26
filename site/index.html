@@ -402,6 +402,8 @@
   tr.click:hover td{background:var(--paper)}
 
   /* stats strip */
+  .pl-verdict{display:flex;flex-direction:column;gap:2px;padding:18px 20px;margin-top:14px;border-left:6px solid #1E7F4F}.pl-verdict.loss{border-left-color:#C8201F}
+  .pl-verdict span{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--steel)}.pl-verdict b{font:700 34px/1.1 'JetBrains Mono',monospace;color:#1E7F4F}.pl-verdict.loss b{color:#C8201F}.pl-verdict small{color:var(--steel);font-size:13px}
   .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:0;margin-top:16px;border:1px solid var(--hairline);background:var(--surface)}
   .stat{padding:14px 16px;border-left:1px solid var(--hairline)}
   .stat:first-child{border-left:0}
@@ -1973,8 +1975,9 @@
     $("#whoName").textContent=me.name; $("#whoRole").textContent= roleLabel(me);
     $("#whoInit").textContent=(me.name||"?").slice(0,1).toUpperCase();
     const mgr = me.role==="manager";
+    TITLES.reports=me.finance?"Accounting":"Reports";
     const groups = (mgr
-      ? [["Shop",["wip","calendar","board","customers","inventory","reports"]],["Collision",["collision"]],["Website",["forsale","leads"]],["Team",["team",...(me.dbRole==="owner"?[]:["clock"]),"training",...(me.finance?["logins"]:[])]]]
+      ? [["Shop",["wip","calendar","board","customers","inventory",...(me.finance?[]:["reports"])]],...(me.finance?[["Accounting",["reports"]]]:[]),["Collision",["collision"]],["Website",["forsale","leads"]],["Team",["team",...(me.dbRole==="owner"?[]:["clock"]),"training",...(me.finance?["logins"]:[])]]]
       : [["My day",[shopWork(me)==="body"?"bodyjobs":"jobs","clock","training"]]]).map(([g,keys])=>[g,keys.filter(k=>k==="team"&&mgr||k==="logins"||canPage(k))]).filter(([g,keys])=>keys.length);
     $("#tabs").innerHTML = groups.map(([g,keys])=>`<div class="sect">${g}</div>`+keys.map(k=>
       `<button data-tab="${k}"><svg viewBox="0 0 24 24">${ICONS[k]}</svg><span>${TITLES[k]}</span>${k==="leads"?'<span class="count red hidden" id="leadCount"></span>':""}${k==="wip"?'<span class="count" id="wipCount"></span>':""}</button>`).join("")).join("");
@@ -3375,7 +3378,114 @@
     });
   }
   // ---------- report center (modeled on Tekmetric / Shopmonkey / Mitchell 1 Manager SE reports) ----------
-  const REP_CATS=[["ourcars","Our cars"],["overview","Overview"],["sales","Sales"],["payments","Payments"],["profit","Profit"],["techs","Technicians"],["customers","Customers"],["estimates","Estimates"],["warranty","Warranty"],["parts","Parts & inventory"],["wip","Work in progress"]];
+  const REP_CATS=[["pl","Profit & loss"],["expenses","Expenses"],["ourcars","Our cars"],["overview","Overview"],["sales","Sales"],["payments","Payments"],["profit","Profit"],["techs","Technicians"],["customers","Customers"],["estimates","Estimates"],["warranty","Warranty"],["parts","Parts & inventory"],["wip","Work in progress"]];
+  // ---------------- Accounting (owners): shop expenses outside of repairs, and profit & loss ----------------
+  const EXP_CATS=["Rent","Utilities","Insurance","Software & subscriptions","Tools & equipment","Shop supplies","Marketing & advertising","Vehicles & fuel","Building repairs & maintenance","Licenses, permits & fees","Bank & card fees","Professional services","Office","Meals","Taxes","Other"];
+  let expenses=null;
+  async function loadExpenses(){ loadExpenses.busy=true; try{ const {data,error}=await sb.from("expenses").select("*").order("date",{ascending:false}); if(error) throw error; expenses=data||[]; } finally{ loadExpenses.busy=false; } return expenses; }
+  // the dates an expense is charged between a and b: once, or on the same day every month (until its end month)
+  function expHits(e,a,b){
+    const d0=new Date(e.date+"T12:00"), out=[];
+    if(e.repeat!=="monthly"){ const t=d0.getTime(); if(t>=a&&t<b) out.push(t); return out; }
+    const until=e.repeat_until?new Date(e.repeat_until+"T23:59").getTime():Infinity;
+    for(let i=0;i<600;i++){ const y=d0.getFullYear(), m=d0.getMonth()+i, dim=new Date(y,m+1,0).getDate(), t=new Date(y,m,Math.min(d0.getDate(),dim),12).getTime();
+      if(t>=b||t>until) break; if(t>=a) out.push(t); }
+    return out;
+  }
+  function plData(a,b){
+    const own=new Set(db.customers.filter(c=>isOwnCustName(c.name)).map(c=>c.id)), inR=t=>t>=a&&t<b;
+    const done=db.jobs.filter(j=>doneWO(j)&&!own.has(j.customerId)&&inR(doneAt(j)));
+    let sales=0, tax=0, pCost=0, pMiss=0;
+    done.forEach(j=>{ const t=woTotals(j); sales+=t.total-t.tax; tax+=t.tax;
+      (j.parts||[]).filter(p=>!p.declined&&String(p.desc||"").trim()).forEach(p=>{ const c=partCost(j,p); if(c==null) pMiss++; else pCost+=Number(p.qty||0)*c; }); });
+    const cars=db.vehicles.filter(v=>own.has(v.customerId)).map(ourCarStats).filter(c=>c.sold!=null&&c.dl.sold_date&&inR(new Date(c.dl.sold_date+"T12:00").getTime()));
+    const carSales=r2(cars.reduce((x,c)=>x+c.sold,0)), carCost=r2(cars.reduce((x,c)=>x+c.buy+c.parts+c.other,0));   // their shop labor is already in team pay
+    const team=r2(db.users.reduce((x,u)=>x+payFor(u.id,a,b).total,0));
+    const fees=r2((db.payments||[]).filter(p=>!p.voided_at&&inR(new Date(p.created_at).getTime())).reduce((x,p)=>x+Number(p.fee||0),0));
+    const byCat={}; let expN=0; (expenses||[]).forEach(e=>{ const n=expHits(e,a,b).length; if(n){ byCat[e.category]=r2((byCat[e.category]||0)+n*Number(e.amount||0)); expN+=n; } });
+    const exp=r2(Object.values(byCat).reduce((x,v)=>x+v,0));
+    sales=r2(sales); tax=r2(tax); pCost=r2(pCost);
+    const income=r2(sales+carSales), costs=r2(pCost+carCost+team+fees), gross=r2(income-costs), net=r2(gross-exp);
+    return {done,cars,sales,tax,pCost,pMiss,carSales,carCost,team,fees,byCat,expN,exp,income,costs,gross,net,margin:income?Math.round(net/income*100):null};
+  }
+  function plReport(R,card,tbl,trow,kvT,tx){
+    if(expenses===null) return card("Profit & loss",'<div class="muted">Loading expenses\u2026</div>');
+    const P=plData(R.a,R.b), neg=v=>v<0, sm=v=>v<0?"\u2212"+money(-v):money(v), col=v=>`<b style="color:${v<0?"#C8201F":"#1E7F4F"}">${sm(v)}</b>`;
+    const verdict=`<div class="card pl-verdict ${neg(P.net)?"loss":"win"}"><span>${R.label} \u00b7 net ${neg(P.net)?"loss":"profit"}</span><b>${sm(P.net)}</b>
+      <small>${P.income?`${P.margin}% of income \u00b7 `:""}${money(P.income)} in \u2212 ${money(P.costs)} cost of the work \u2212 ${money(P.exp)} shop expenses</small></div>`;
+    const cats=Object.entries(P.byCat).sort((a,b)=>b[1]-a[1]);
+    const rows=[
+      ["<b>Income</b>",""],
+      ["Repair sales (before tax)",money(P.sales),P.done],
+      ...(P.carSales?[["Cars we sold ("+P.cars.length+")",money(P.carSales)]]:[]),
+      ["<b>Total income</b>",`<b>${money(P.income)}</b>`],
+      ["<b>Cost of the work</b>",""],
+      ["Parts for repairs (our cost)",money(P.pCost)],
+      ...(P.carSales?[["Cars we sold: bought for + parts + other costs",money(P.carCost)]]:[]),
+      ["Team pay (timesheets and flag hours)",money(P.team)],
+      ["Card fees recorded on payments",money(P.fees)],
+      ["<b>Gross profit</b>",col(P.gross)],
+      ["<b>Shop expenses</b>",""],
+      ...cats.map(([c,v])=>[esc(c),money(v)]),
+      ...(cats.length?[]:[['<span class="muted">No expenses entered for these dates</span>',""]]),
+      ["<b>Total shop expenses</b>",`<b>${money(P.exp)}</b>`],
+      ["<b>Net profit</b>",col(P.net)]];
+    // the last 12 months, to see the trend
+    const now=new Date(), months=[]; for(let i=11;i>=0;i--){ const a=new Date(now.getFullYear(),now.getMonth()-i,1).getTime(), b=new Date(now.getFullYear(),now.getMonth()-i+1,1).getTime(); months.push({a,b,P:plData(a,Math.min(b,Date.now()+86400000))}); }
+    const trend=months.filter(m=>m.P.income||m.P.exp||m.P.costs);
+    return verdict+card("Profit & loss \u00b7 "+R.label, kvT(rows),
+        `Sales tax collected (${money(P.tax)}) isn't income, so it's left out. Repairs count on the day the car was finished; monthly bills count on their day each month.${P.pMiss?` ${P.pMiss} part line${P.pMiss>1?"s have":" has"} no cost entered, so profit may read high.`:""} Square and other card fees only count here if they're on the payment or entered as an expense.`)
+      +card("Month by month", tbl([["Month"],["Income","num"],["Cost of the work","num"],["Gross profit","num"],["Shop expenses","num"],["Net profit","num"],["Margin","num"]],
+        trend.map(m=>trow([new Date(m.a).toLocaleDateString([],{month:"short",year:"numeric"}),[money(m.P.income)],[money(m.P.costs)],[money(m.P.gross)],[money(m.P.exp)],[col(m.P.net)],[m.P.margin!=null?m.P.margin+"%":"\u2013"]])),
+        trend.length?trow(["<b>12 months</b>",[`<b>${money(r2(trend.reduce((x,m)=>x+m.P.income,0)))}</b>`],[money(r2(trend.reduce((x,m)=>x+m.P.costs,0)))],[money(r2(trend.reduce((x,m)=>x+m.P.gross,0)))],[money(r2(trend.reduce((x,m)=>x+m.P.exp,0)))],[col(r2(trend.reduce((x,m)=>x+m.P.net,0)))],""]):""));
+  }
+  function expReport(R,card,tbl,trow){
+    const add='<button class="btn sm no-print" data-exp="" type="button">+ Add expense</button>';
+    if(expenses===null) return card("Expenses",'<div class="muted">Loading\u2026</div>');
+    const hits=[]; expenses.forEach(e=>expHits(e,R.a,R.b).forEach(t=>hits.push({e,t})));
+    hits.sort((a,b)=>b.t-a.t);
+    const total=r2(hits.reduce((x,h)=>x+Number(h.e.amount||0),0)), byCat={}; hits.forEach(h=>{ byCat[h.e.category]=r2((byCat[h.e.category]||0)+Number(h.e.amount||0)); });
+    const bills=expenses.filter(e=>e.repeat==="monthly"&&(!e.repeat_until||e.repeat_until>=todayStr())), perMonth=r2(bills.reduce((x,e)=>x+Number(e.amount||0),0));
+    const dd=t=>new Date(t).toLocaleDateString([],{month:"short",day:"numeric",year:"numeric"});
+    return `<div class="row no-print" style="margin:4px 0 0;gap:8px"><span class="muted">Rent, utilities, insurance, tools, software \u2014 anything the shop pays for outside of customer repairs. Team pay and repair parts are already counted from timesheets and work orders.</span><span class="spacer"></span>${add}</div>
+      <div class="stats rep-kpis"><div class="stat"><b>${money(total)}</b><span>Expenses \u00b7 ${esc(R.label)}</span></div><div class="stat"><b>${money(perMonth)}</b><span>Monthly bills (${bills.length})</span></div><div class="stat"><b>${hits.length}</b><span>Charges</span></div></div>`
+      +card("By category", tbl([["Category"],["Amount","num"],["Share","num"]], Object.entries(byCat).sort((a,b)=>b[1]-a[1]).map(([c,v])=>trow([esc(c),[money(v)],[total?Math.round(v/total*100)+"%":"\u2013"]])),
+        total?trow(["<b>Total</b>",[`<b>${money(total)}</b>`],""]):""))
+      +card("Expenses \u00b7 "+R.label, tbl([["Date"],["Category"],["Paid to"],["What for"],["Paid with"],["Amount","num"]],
+        hits.map(({e,t})=>trow([dd(t),esc(e.category),esc(e.vendor)+(e.repeat==="monthly"?' <span class="pill" style="font-size:10px">Monthly</span>':""),esc(e.description),esc(e.method),[money(Number(e.amount||0))]]).replace("<tr>",`<tr class="click" data-exp="${esc(e.id)}">`))))
+      +card("Monthly bills", tbl([["Category"],["Paid to"],["Day"],["Since"],["Until"],["Per month","num"]],
+        bills.map(e=>trow([esc(e.category),esc(e.vendor),new Date(e.date+"T12:00").getDate()+"",dd(new Date(e.date+"T12:00").getTime()),e.repeat_until?dd(new Date(e.repeat_until+"T12:00").getTime()):"Ongoing",[money(Number(e.amount||0))]]).replace("<tr>",`<tr class="click" data-exp="${esc(e.id)}">`)),
+        bills.length?trow(["<b>Total</b>","","","","",[`<b>${money(perMonth)}</b>`]]):""), "Repeating bills count once a month on the same day. To stop one, open it and set the last month.");
+  }
+  function editExpense(e,done){
+    const isNew=!e; e=e||{date:todayStr(),category:"Other",vendor:"",description:"",amount:"",method:"",repeat:"",repeat_until:""};
+    const vendors=[...new Set((expenses||[]).map(x=>x.vendor).filter(Boolean))].slice(0,50);
+    modal(`<h2>${isNew?"Add an expense":"Edit expense"}</h2>
+      <div class="two"><div><label>Date</label><input type="date" id="exD" value="${esc(e.date)}"></div><div><label>Amount</label><input id="exA" inputmode="decimal" value="${esc(e.amount)}" placeholder="0.00"></div></div>
+      <label>Category</label><select id="exC">${EXP_CATS.map(c=>`<option ${c===e.category?"selected":""}>${esc(c)}</option>`).join("")}</select>
+      <label>Paid to</label><input id="exV" list="exVL" value="${esc(e.vendor)}" placeholder="e.g. NV Energy"><datalist id="exVL">${vendors.map(v=>`<option value="${esc(v)}">`).join("")}</datalist>
+      <label>What for (optional)</label><input id="exN" value="${esc(e.description)}">
+      <label>Paid with</label><select id="exM">${["","Card","Bank / ACH","Check","Cash","Zelle"].map(m=>`<option value="${m}" ${m===e.method?"selected":""}>${m||"\u2014"}</option>`).join("")}</select>
+      <label class="inline" style="margin-top:12px"><input type="checkbox" id="exR" ${e.repeat==="monthly"?"checked":""}> Repeats every month (rent, insurance, software\u2026)</label>
+      <div id="exUW" class="${e.repeat==="monthly"?"":"hidden"}"><label>Last month it's paid (leave blank if ongoing)</label><input type="date" id="exU" value="${esc(e.repeat_until||"")}"></div>
+      <p class="err" id="exErr"></p>
+      <div class="row" style="margin-top:10px">${isNew?"":'<button class="btn ghost" id="exDel" type="button">Delete</button>'}<span class="spacer"></span><button class="btn ghost" data-close type="button">Cancel</button><button class="btn" id="exOk" type="button">Save</button></div>`, root=>{
+      const q=x=>root.querySelector(x);
+      q("#exR").onchange=()=>q("#exUW").classList.toggle("hidden",!q("#exR").checked);
+      q("#exOk").onclick=async()=>{ const amt=Number(String(q("#exA").value).replace(/[$,\s]/g,""));
+        if(!(amt>=0)||q("#exA").value.trim()==="") return q("#exErr").textContent="Enter the amount.";
+        if(!q("#exD").value) return q("#exErr").textContent="Pick the date.";
+        const row={date:q("#exD").value,amount:r2(amt),category:q("#exC").value,vendor:q("#exV").value.trim(),description:q("#exN").value.trim(),method:q("#exM").value,repeat:q("#exR").checked?"monthly":"",repeat_until:q("#exR").checked&&q("#exU").value?q("#exU").value:null};
+        q("#exOk").disabled=true;
+        const r=isNew?await sb.from("expenses").insert(row).select().single():await sb.from("expenses").update(row).eq("id",e.id).select().single();
+        if(r.error){ q("#exOk").disabled=false; return q("#exErr").textContent="Couldn't save: "+r.error.message; }
+        expenses=(expenses||[]).filter(x=>x.id!==r.data.id).concat(r.data).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+        closeModal(); toast(isNew?"Expense added":"Expense saved"); done&&done(); };
+      const del=q("#exDel"); if(del) del.onclick=async()=>{ if(del.dataset.sure!=="1"){ del.dataset.sure="1"; del.textContent="Tap again to delete"; return; }
+        const r=await sb.from("expenses").delete().eq("id",e.id); if(r.error) return q("#exErr").textContent="Couldn't delete: "+r.error.message;
+        expenses=(expenses||[]).filter(x=>x.id!==e.id); closeModal(); toast("Expense deleted"); done&&done(); };
+    });
+  }
   function repRange(){
     const key=viewReports.range||"week";
     if(key==="custom"){ const f=viewReports.from||todayStr(), t=viewReports.to||f; const a=new Date(f+"T00:00").getTime(), b=new Date(t+"T00:00").getTime()+86400000;
@@ -3385,7 +3495,8 @@
   }
   function viewReports(){
     if(me.role!=="manager") return;
-    const fin=isFin(), R=repRange(), tot=woTotals, cat=viewReports.cat||"overview";
+    const fin=isFin(), R=repRange(), tot=woTotals, cat=viewReports.cat||(fin?"pl":"overview");
+    if(fin&&expenses===null&&!loadExpenses.busy){ loadExpenses().then(()=>{ if(tab==="reports") viewReports(); }).catch(e=>{ expenses=[]; toast("Couldn't load expenses: "+(e.message||e)); }); }
     const inR=ts=>ts>=R.a&&ts<R.b;
     const done=db.jobs.filter(j=>doneWO(j)&&inR(doneAt(j)));
     const open=db.jobs.filter(j=>isWO(j)&&!["completed","picked_up"].includes(j.status));
@@ -3573,11 +3684,12 @@
     if(fin) S.ourcars=ourCarsReport(card,tbl,trow);
     const rangeBtns=[["today","Today"],["yesterday","Yesterday"],["week","This week"],["lastweek","Last week"],["month","This month"],["lastmonth","Last month"],["ytd","Year to date"],["custom","Custom"]]
       .map(([k,l])=>`<button class="btn ${R.key===k?"":"ghost"} sm" style="margin:0 6px 6px 0" data-range="${k}" type="button">${l}</button>`).join("");
-    const catBtns=REP_CATS.filter(([k])=>k!=="ourcars"||fin).map(([k,l])=>`<button type="button" class="chip ${cat===k?"on":""}" data-rcat="${k}">${l}</button>`).join("");
+    if(fin){ S.pl=plReport(R,card,tbl,trow,kvT,tx); S.expenses=expReport(R,card,tbl,trow); }
+    const catBtns=REP_CATS.filter(([k])=>!["ourcars","pl","expenses"].includes(k)||fin).map(([k,l])=>`<button type="button" class="chip ${cat===k?"on":""}" data-rcat="${k}">${l}</button>`).join("");
     const catLabel=(REP_CATS.find(c=>c[0]===cat)||REP_CATS[0])[1];
     $("#view").innerHTML = `
       <div class="print-head"><img src="${LOGO_INK}" alt="Citea Motors"><div><b>${esc(catLabel)} report \u00b7 ${R.label}</b><span>${new Date(R.a).toLocaleDateString()} \u2013 ${new Date(R.b-1).toLocaleDateString()} \u00b7 printed ${new Date().toLocaleString()}</span></div></div>
-      <div class="row no-print" style="margin-bottom:10px"><h2 style="margin:0">Reports</h2><span class="spacer"></span><span class="muted">${R.label}</span><button class="btn dark sm" id="repPrint" type="button">Print / save PDF</button></div>
+      <div class="row no-print" style="margin-bottom:10px"><h2 style="margin:0">${fin?"Accounting":"Reports"}</h2><span class="spacer"></span><span class="muted">${R.label}</span><button class="btn dark sm" id="repPrint" type="button">Print / save PDF</button></div>
       <div class="no-print" style="margin-bottom:4px;${cat==="ourcars"?"display:none":""}">${rangeBtns}</div>
       ${R.key==="custom"?`<div class="row no-print" style="gap:8px;margin-bottom:8px;flex-wrap:wrap"><label class="inline">From <input type="date" id="repFrom" value="${viewReports.from||todayStr()}"></label><label class="inline">To <input type="date" id="repTo" value="${viewReports.to||viewReports.from||todayStr()}"></label></div>`:""}
       <div class="board-tools rep-cats no-print">${catBtns}</div>
@@ -3591,6 +3703,7 @@
     const rf=$("#repFrom"), rt=$("#repTo"); if(rf) rf.onchange=()=>{ viewReports.from=rf.value; if(viewReports.to<rf.value) viewReports.to=rf.value; viewReports(); }; if(rt) rt.onchange=()=>{ viewReports.to=rt.value; viewReports(); };
     $("#view").querySelectorAll("[data-rec]").forEach(b=>b.onclick=()=>approvalRecord(b.dataset.rec));
     $("#view").querySelectorAll("[data-deal]").forEach(b=>b.onclick=()=>editCarDeal(b.dataset.deal));
+    $("#view").querySelectorAll("[data-exp]").forEach(b=>b.onclick=()=>editExpense(b.dataset.exp?(expenses||[]).find(e=>e.id===b.dataset.exp):null, ()=>viewReports()));
     const aq=$("#apprQ"); if(aq) aq.oninput=()=>{ const q=aq.value.trim().toLowerCase(); $("#view").querySelectorAll("[data-apc]").forEach(d=>{ d.style.display=!q||d.dataset.apc.includes(q)?"":"none"; if(q) d.open=true; }); };
     // CSV of any report table (opens in Excel / Google Sheets / QuickBooks)
     $("#view").querySelectorAll("[data-csv]").forEach(b=>b.onclick=()=>{ const t=b.closest(".rep-card").querySelector("table"); if(!t) return;
