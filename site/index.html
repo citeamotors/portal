@@ -11,6 +11,9 @@
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-title" content="Citea">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -537,6 +540,7 @@
   .wait-reasons{display:flex;flex-direction:column;gap:8px}.wait-reasons .btn{display:flex;flex-direction:column;align-items:center;gap:2px}.wait-reasons small{font-size:11.5px;font-weight:400;text-transform:none;letter-spacing:0;opacity:.75}
   .wait-why{display:flex;align-items:center;gap:8px;margin-top:8px}
   .kcol{background:var(--sub);min-height:max(520px,calc(100vh - 300px))}
+  .app-get{display:flex;flex-direction:column}.app-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-top:1px solid var(--hairline)}.app-row:first-child{border-top:0;padding-top:4px}.app-row .muted{font-size:12.5px;margin-top:2px}.app-row .btn{flex:none}
   /* computers: the board fits the screen, column headers stay put and each column scrolls on its own */
   @media (min-width:701px){
     .kanban.mtab.fit{align-items:stretch}
@@ -2061,6 +2065,7 @@
   }
   window.addEventListener("popstate",()=>{ if(!me) return; closeModal(); routeQuiet=true; try{ if(!goRoute(location.hash)) show(me.role==="manager"?"wip":homeTab()); } finally{ routeQuiet=false; } });
 
+  window.addEventListener("beforeinstallprompt",e=>{ e.preventDefault(); window.__installEvt=e; });
   function show(t){
     openWO.from=null;
     if(t==="jobs"&&me&&me.role!=="manager"&&shopWork(me)==="body") t="bodyjobs";
@@ -4075,6 +4080,13 @@
             <div><label>Confirm</label><input id="pinNew2" type="password" maxlength="64" autocomplete="new-password"></div></div>
           <div class="hint">${PW_RULE}</div>
           ${saveRow("pinMsg","pinSave","Change password")}</div>
+        <div class="card"><h2>Get the app</h2><p class="set-desc">The portal as an app with its own icon and window. It updates by itself.</p>
+          <div class="app-get">
+            <div class="app-row" id="agMac"><div><b>Mac</b><div class="muted">Open the download, drag Citea Motors into Applications. The first time, open it from System Settings \u203a Privacy &amp; Security \u203a Open Anyway.</div></div><a class="btn sm" href="download/CiteaMotors.dmg" download>Download for Mac</a></div>
+            <div class="app-row hidden" id="agAnd"><div><b>Android</b><div class="muted">Download, open it, and allow installs from your browser when asked.</div></div><a class="btn sm" href="download/CiteaMotors.apk" download>Download for Android</a></div>
+            <div class="app-row"><div><b>iPhone &amp; iPad</b><div class="muted">Open this page in Safari, tap Share, then Add to Home Screen.</div></div></div>
+            <div class="app-row hidden" id="agInst"><div><b>This computer</b><div class="muted">Install from this browser.</div></div><button class="btn sm" id="agInstBtn" type="button">Install</button></div>
+          </div></div>
       </div>
 
       ${shop?`<div class="set-sh">Shop</div>
@@ -4116,6 +4128,9 @@
         <div class="row"><span class="hint" id="bakMsg" style="margin:0"></span><span class="spacer"></span>${sampleCount()?'<button class="btn dark" id="rmSample" type="button">Remove sample data</button>':""}</div></div>`:""}
       </div>`:""}
     </div>`;
+    if(/iPhone|iPad|Android/i.test(navigator.userAgent)&&$("#agMac")) $("#agMac").classList.add("hidden");
+    fetch("download/CiteaMotors.apk",{method:"HEAD",cache:"no-store"}).then(r=>{ if(r.ok&&$("#agAnd")) $("#agAnd").classList.remove("hidden"); }).catch(()=>{});
+    if(window.__installEvt&&$("#agInst")){ $("#agInst").classList.remove("hidden"); $("#agInstBtn").onclick=async()=>{ const e=window.__installEvt; window.__installEvt=null; e.prompt(); try{ await e.userChoice; }catch(x){} $("#agInst").classList.add("hidden"); }; }
     $("#view").querySelectorAll("[data-theme-set]").forEach(b=>b.onclick=()=>{ applyTheme(b.dataset.themeSet); viewSettings(); });
     $("#pinSave").onclick=()=>{
       const o=$("#pinOld").value, n=$("#pinNew").value, n2=$("#pinNew2").value, msg=$("#pinMsg");
