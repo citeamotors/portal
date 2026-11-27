@@ -18,7 +18,7 @@ android {
             keyPassword System.getenv("KS_PASS")
         }
     }
-    buildTypes { release { minifyEnabled false; signingConfig signingConfigs.release } }
+    buildTypes { release { minifyEnabled false; if (System.getenv("KS_PASS")) signingConfig signingConfigs.release } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
 dependencies { implementation "com.google.androidbrowserhelper:androidbrowserhelper:2.5.0" }
