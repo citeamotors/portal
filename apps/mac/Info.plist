@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleName</key><string>Citea Motors</string>
+  <key>CFBundleDisplayName</key><string>Citea Motors</string>
+  <key>CFBundleIdentifier</key><string>com.citeamotors.portal</string>
+  <key>CFBundleExecutable</key><string>Citea</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSMinimumSystemVersion</key><string>12.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.business</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSHumanReadableCopyright</key><string>Citea Motors</string>
+  <key>NSCameraUsageDescription</key><string>The portal uses the camera to scan VINs and take vehicle photos.</string>
+  <key>NSMicrophoneUsageDescription</key><string>The portal uses the microphone for voice notes.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>The portal checks you are at the shop when you clock in.</string>
+  <key>NSLocationUsageDescription</key><string>The portal checks you are at the shop when you clock in.</string>
+</dict></plist>
