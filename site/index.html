@@ -2026,7 +2026,8 @@
     if(sqr){ show("wip"); sqHandleReturn(sqr); }
     else if(qm){ try{ history.replaceState(null,"",location.pathname); }catch(e){} show(mgr?"settings":homeTab());
       toast({connected:"QuickBooks connected",cancelled:"QuickBooks connection cancelled",expired:"That took too long \u2014 try Connect QuickBooks again"}[qm[1]]||"Couldn't connect QuickBooks \u2014 try again"); }
-    else if(wm && db.jobs.some(j=>j.id===wm[1])) openWorksheet(wm[1]); else show(mgr?"wip":homeTab());
+    else if(wm && db.jobs.some(j=>j.id===wm[1])) openWorksheet(wm[1]);
+    else { setRoute.first=true; if(!goRoute(location.hash)) show(mgr?"wip":homeTab()); setRoute.first=false; }
     if(mgr){ setTimeout(()=>qboSync(null,true),4000); setInterval(()=>{ if(document.visibilityState==="visible") qboSync(null,true); },180000); }
   }
   function updateChrome(){
@@ -2038,6 +2039,28 @@
     const c=$("#wipCount"); if(c) c.textContent = db.jobs.filter(j=>isWO(j)&&j.status!=="picked_up").length;
     renderAlerts();
   }
+  // ---- page links: every section and work order has its own address (#accounting, #wo/362) so refresh, back and bookmarks work
+  const SLUGS={wip:"work-in-progress",board:"tech-board",forsale:"cars-for-sale",clock:"time-clock",bodyjobs:"body-jobs",logins:"logins"};
+  const slugOf=t=>t==="reports"?(me&&me.finance?"accounting":"reports"):(SLUGS[t]||t);
+  const tabOfSlug=x=>{ if(x==="accounting"||x==="reports") return "reports"; const k=Object.keys(SLUGS).find(k=>SLUGS[k]===x); return k||x; };
+  let routeQuiet=false;
+  function setRoute(h){ if(routeQuiet||!me) return; if(location.hash===h) return; try{ (setRoute.first?history.replaceState:history.pushState).call(history,null,"",h); }catch(e){} setRoute.first=false; }
+  function woRef(j){ return j&&j.number?String(j.number):(j&&j.id)||""; }
+  // open whatever the address points at; false if it doesn't name a page
+  function goRoute(h){
+    const m=(h||"").match(/^#([a-z-]+)(?:\/(.+))?$/); if(!m||!me) return false;
+    const [ ,a,b]=m;
+    if(a==="wo"&&b){ const x=decodeURIComponent(b); const j=db.jobs.find(j=>String(j.number)===x||j.id===x); if(j&&me.role==="manager"){ openWO(j.id); return true; } return false; }
+    const t=tabOfSlug(a);
+    const known=["wip","calendar","board","customers","inventory","reports","collision","forsale","leads","team","clock","training","logins","settings","timesheets","earnings","jobs","bodyjobs"];
+    if(!known.includes(t)) return false;
+    if(me.role!=="manager"&&t!=="settings"&&!document.querySelector(`#tabs button[data-tab="${t}"]`)) return false;
+    if(t==="reports"&&b&&REP_CATS.some(c=>c[0]===b)) viewReports.cat=b;
+    if(t==="team") viewTeam.open=null;
+    show(t); return true;
+  }
+  window.addEventListener("popstate",()=>{ if(!me) return; closeModal(); routeQuiet=true; try{ if(!goRoute(location.hash)) show(me.role==="manager"?"wip":homeTab()); } finally{ routeQuiet=false; } });
+
   function show(t){
     openWO.from=null;
     if(t==="jobs"&&me&&me.role!=="manager"&&shopWork(me)==="body") t="bodyjobs";
@@ -2054,6 +2077,7 @@
     document.querySelector(".topbar").classList.remove("search-open");
     ({clock:viewClock,jobs:viewJobs,training:viewTraining,logins:viewLogins,collision:viewCollision,bodyjobs:viewBodyJobs,forsale:viewForSale,leads:viewLeads,board:viewBoard,timesheets:viewTimesheets,team:viewTeam,earnings:viewEarnings,wip:viewWip,customers:viewCustomers,inventory:viewInventory,reports:viewReports,calendar:viewCalendar,settings:viewSettings})[t]();
     updateChrome(); window.scrollTo(0,0); logAct("page",TITLES[t]||t);
+    setRoute("#"+slugOf(t)+(t==="reports"&&viewReports.cat?"/"+viewReports.cat:""));
   }
 
   /* global search: the whole system (work orders, parts used, customers, vehicles, inventory, appointments, tasks, team, training, reports, pages) */
@@ -3833,7 +3857,7 @@
     $("#view").querySelectorAll("[data-tix]").forEach(el=>el.onclick=()=>{ const t=el.dataset.tixt||((el.querySelector("td")||el).textContent||"").trim(); repTickets(t.replace(/<[^>]*>/g,""), jobsById(TX[+el.dataset.tix]), R, fin); });
     $("#view").querySelectorAll("[data-wo1]").forEach(el=>el.onclick=()=>{ openWO.from="reports"; openWO(el.dataset.wo1); });
     $("#view").querySelectorAll("[data-range]").forEach(b=>b.onclick=()=>{ viewReports.range=b.dataset.range; if(b.dataset.range==="custom"&&!viewReports.from){ viewReports.from=todayStr(weekStart()); viewReports.to=todayStr(); } viewReports(); });
-    $("#view").querySelectorAll("[data-rcat]").forEach(b=>b.onclick=()=>{ viewReports.cat=b.dataset.rcat; viewReports(); window.scrollTo(0,0); });
+    $("#view").querySelectorAll("[data-rcat]").forEach(b=>b.onclick=()=>{ viewReports.cat=b.dataset.rcat; viewReports(); window.scrollTo(0,0); setRoute("#"+slugOf("reports")+"/"+viewReports.cat); });
     const rf=$("#repFrom"), rt=$("#repTo"); if(rf) rf.onchange=()=>{ viewReports.from=rf.value; if(viewReports.to<rf.value) viewReports.to=rf.value; viewReports(); }; if(rt) rt.onchange=()=>{ viewReports.to=rt.value; viewReports(); };
     $("#view").querySelectorAll("[data-rec]").forEach(b=>b.onclick=()=>approvalRecord(b.dataset.rec));
     $("#view").querySelectorAll("[data-deal]").forEach(b=>b.onclick=()=>editCarDeal(b.dataset.deal));
@@ -5994,6 +6018,7 @@
     }, preset||{});
     normLines(j); j._costs={...((db.woCosts||{})[j.id]||{})};
     tab="wo"; clearInterval(tick); woOpenId=j.id;
+    if(existing) setRoute("#wo/"+encodeURIComponent(woRef(existing)));
     document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.tab==="wip"));
     $("#pageTitle").textContent = existing ? "Work order" : "New work order"; window.scrollTo(0,0);
     let newCust = !j.customerId, newVeh = !j.vehicleId;
