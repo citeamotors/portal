@@ -57,3 +57,21 @@ jobs:
           ls -la out
       - uses: actions/upload-artifact@v4
         with: { name: android-unsigned, path: apps/android/out }
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the app
+        working-directory: apps/windows
+        run: dotnet build -c Release
+      - name: Build the installer
+        working-directory: apps/windows
+        shell: pwsh
+        run: |
+          $iscc = Get-Command iscc -ErrorAction SilentlyContinue
+          if (-not $iscc) { choco install innosetup -y --no-progress | Out-Null; $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" } else { $iscc = $iscc.Source }
+          & $iscc installer.iss
+          Get-ChildItem out
+      - uses: actions/upload-artifact@v4
+        with: { name: windows-setup, path: apps/windows/out/CiteaMotorsSetup.exe }
