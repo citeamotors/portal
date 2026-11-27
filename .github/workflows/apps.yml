@@ -41,29 +41,19 @@ jobs:
 
   android:
     runs-on: ubuntu-latest
-    env:
-      KS_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
-      KS_PASS: ${{ secrets.ANDROID_KS_PASS }}
     steps:
       - uses: actions/checkout@v4
-      - name: Skip if the signing key isn't set up yet
-        id: key
-        run: if [ -n "$KS_B64" ]; then echo "ok=1" >> $GITHUB_OUTPUT; else echo "No ANDROID_KEYSTORE_B64 secret yet, skipping Android."; fi
       - uses: actions/setup-java@v4
-        if: steps.key.outputs.ok
         with: { distribution: temurin, java-version: "17" }
       - uses: gradle/actions/setup-gradle@v4
-        if: steps.key.outputs.ok
         with: { gradle-version: "8.9" }
-      - name: Build the signed app
-        if: steps.key.outputs.ok
+      - name: Build the app (signed afterwards with the shop's key, which is kept off GitHub)
         working-directory: apps/android
         run: |
           set -e
-          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
-          KS_FILE="$RUNNER_TEMP/release.jks" gradle --no-daemon assembleRelease
-          cp app/build/outputs/apk/release/app-release.apk CiteaMotors.apk
-          ls -la CiteaMotors.apk
+          gradle --no-daemon assembleRelease
+          mkdir out; cp app/build/outputs/apk/release/app-release-unsigned.apk out/CiteaMotors-unsigned.apk
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1); cp $BT/lib/apksigner.jar $BT/zipalign out/
+          ls -la out
       - uses: actions/upload-artifact@v4
-        if: steps.key.outputs.ok
-        with: { name: android-apk, path: apps/android/CiteaMotors.apk }
+        with: { name: android-unsigned, path: apps/android/out }
