@@ -4083,6 +4083,7 @@
         <div class="card"><h2>Get the app</h2><p class="set-desc">The portal as an app with its own icon and window. It updates by itself.</p>
           <div class="app-get">
             <div class="app-row" id="agMac"><div><b>Mac</b><div class="muted">Open the download, drag Citea Motors into Applications. The first time, open it from System Settings \u203a Privacy &amp; Security \u203a Open Anyway.</div></div><a class="btn sm" href="download/CiteaMotors.dmg" download>Download for Mac</a></div>
+            <div class="app-row" id="agWin"><div><b>Windows</b><div class="muted">Run the installer. If Windows shows \u201cprotected your PC\u201d, click More info \u203a Run anyway.</div></div><a class="btn sm" href="download/CiteaMotorsSetup.exe" download>Download for Windows</a></div>
             <div class="app-row hidden" id="agAnd"><div><b>Android</b><div class="muted">Download, open it, and allow installs from your browser when asked.</div></div><a class="btn sm" href="download/CiteaMotors.apk" download>Download for Android</a></div>
             <div class="app-row"><div><b>iPhone &amp; iPad</b><div class="muted">Open this page in Safari, tap Share, then Add to Home Screen.</div></div></div>
             <div class="app-row hidden" id="agInst"><div><b>This computer</b><div class="muted">Install from this browser.</div></div><button class="btn sm" id="agInstBtn" type="button">Install</button></div>
@@ -4128,7 +4129,7 @@
         <div class="row"><span class="hint" id="bakMsg" style="margin:0"></span><span class="spacer"></span>${sampleCount()?'<button class="btn dark" id="rmSample" type="button">Remove sample data</button>':""}</div></div>`:""}
       </div>`:""}
     </div>`;
-    if(/iPhone|iPad|Android/i.test(navigator.userAgent)&&$("#agMac")) $("#agMac").classList.add("hidden");
+    if(/iPhone|iPad|Android/i.test(navigator.userAgent)){ ["#agMac","#agWin"].forEach(k=>$(k)&&$(k).classList.add("hidden")); }
     fetch("download/CiteaMotors.apk",{method:"HEAD",cache:"no-store"}).then(r=>{ if(r.ok&&$("#agAnd")) $("#agAnd").classList.remove("hidden"); }).catch(()=>{});
     if(window.__installEvt&&$("#agInst")){ $("#agInst").classList.remove("hidden"); $("#agInstBtn").onclick=async()=>{ const e=window.__installEvt; window.__installEvt=null; e.prompt(); try{ await e.userChoice; }catch(x){} $("#agInst").classList.add("hidden"); }; }
     $("#view").querySelectorAll("[data-theme-set]").forEach(b=>b.onclick=()=>{ applyTheme(b.dataset.themeSet); viewSettings(); });
