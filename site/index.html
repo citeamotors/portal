@@ -540,6 +540,8 @@
   .wait-reasons{display:flex;flex-direction:column;gap:8px}.wait-reasons .btn{display:flex;flex-direction:column;align-items:center;gap:2px}.wait-reasons small{font-size:11.5px;font-weight:400;text-transform:none;letter-spacing:0;opacity:.75}
   .wait-why{display:flex;align-items:center;gap:8px;margin-top:8px}
   .kcol{background:var(--sub);min-height:max(520px,calc(100vh - 300px))}
+  .aa-list{display:flex;flex-direction:column}.aa-row{display:grid;grid-template-columns:220px minmax(0,1fr);gap:12px;padding:12px 0;border-top:1px solid var(--hairline);align-items:start}.aa-row:first-child{border-top:0}.aa-row.off .crew{opacity:.45}.aa-who .muted{font-size:12px;margin-top:2px}.aa-tog{display:flex;align-items:center;gap:6px;margin:8px 0 0;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--ink)}.aa-tog input{width:16px;height:16px;margin:0;accent-color:var(--red)}
+  @media (max-width:700px){.aa-row{grid-template-columns:1fr}}
   .app-get{display:flex;flex-direction:column}.app-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-top:1px solid var(--hairline)}.app-row:first-child{border-top:0;padding-top:4px}.app-row .muted{font-size:12.5px;margin-top:2px}.app-row .btn{flex:none}
   /* computers: the board fits the screen, column headers stay put and each column scrolls on its own */
   @media (min-width:701px){
@@ -1326,14 +1328,15 @@
     const owner=prof.some(p=>p.id===(me||{}).id&&p.role==="owner");
     const mgrLoad=prof.some(p=>p.id===(me||{}).id&&(p.role==="owner"||p.role==="gm"));
     const none=Promise.resolve(null);
-    const [pc, est, pay, punch, wsr, links, pays, qbo, woc, deals, pins]=await Promise.all([
+    const [pc, est, pay, punch, wsr, links, pays, qbo, woc, deals, pins, skl]=await Promise.all([
       mgrLoad?fetchAll("part_costs"):Promise.resolve([]),
       safe(fetchFresh("estimate_requests",EST_COLS),[]), safe(fetchAll("team_pay"),[]), safe(fetchAll("punch_edits"),null), safe(fetchFresh("worksheets",null,"wo_id"),[]),
       mgrLoad?safe(fetchFresh("customer_links",null,"wo_id"),[]):none, mgrLoad?safe(fetchAll("payments"),[]):none, mgrLoad?safe(fetchAll("qbo_links"),[]):none, mgrLoad?safe(fetchAll("wo_costs"),[]):none,
-      owner?safe(fetchAll("car_deals"),null):none, owner?safe(fetchAll("team_pins"),[]):none]);
+      owner?safe(fetchAll("car_deals"),null):none, owner?safe(fetchAll("team_pins"),[]):none, safe(fetchAll("tech_skills"),[])]);
     if(mgrLoad){ const m=Object.fromEntries((pc||[]).map(r=>[r.part_id,Number(r.cost)])); d.inventory.forEach(p=>{ if(m[p.id]!==undefined) p.cost=m[p.id]; }); }
     d.estimates=est||[];
     d.pay=Object.fromEntries((pay||[]).map(r=>[r.user_id,r]));
+    d.skills=Object.fromEntries((skl||[]).map(r=>[r.user_id,r]));
     d.punchEdits=punch||[]; d.punchLogOn=!!punch;
     d.settings.payUrl=st.pay_url||""; d.settings.squareAppId=st.square_app_id||""; d.settings.zelleTo=st.zelle_to||""; d.settings.snapUrl=st.snap_url||""; d.settings.affirmUrl=st.affirm_url||""; d.settings.cardFee=Number(st.card_fee_pct??0); d.settings.cashDisc=Number(st.cash_discount_pct??3); d.settings.openTime=st.open_time||"07:00"; d.settings.closeTime=st.close_time||"17:00";
     d.worksheets=Object.fromEntries((wsr||[]).map(r=>[r.wo_id,r]));
@@ -1495,6 +1498,7 @@
     const t=pl.table, ev=pl.eventType, nw=pl.new||{}, od=pl.old||{};
     if(t==="profiles"){ loadUsersOnly(); return; }
     if(t==="punch_edits"){ db.punchEdits=db.punchEdits||[]; if(ev==="INSERT") db.punchEdits.push(nw); return scheduleRender(); }
+    if(t==="tech_skills"){ db.skills=db.skills||{}; if(ev==="DELETE") delete db.skills[od.user_id]; else db.skills[nw.user_id]=nw; return scheduleRender(); }
     if(t==="team_pay"){ db.pay=db.pay||{}; if(ev==="DELETE") delete db.pay[od.user_id]; else db.pay[nw.user_id]=nw; return scheduleRender(); }
     if(t==="team_roles"){ loadRoles().then(()=>{ if(me){ const u=db.allUsers.find(x=>x.id===me.id); if(u) Object.assign(me,{roleId:u.roleId}); } startApp(); }); return; }
     if(t==="estimate_requests"){ db.estimates=db.estimates||[]; const i=db.estimates.findIndex(r=>r.id===(nw.id||od.id)), prev=i>=0?db.estimates[i]:null;
@@ -4918,8 +4922,10 @@
         <td style="text-align:right;white-space:nowrap">${me.role==="manager"&&u.active&&isLocked(u)?`<button class="btn sm" data-unlock="${u.id}">Unlock</button> `:""}${isFin()?'<span class="muted">\u203a</span>':""}</td></tr>`; }).join("")}
       </tbody></table></div>
     </div>
+    ${me.role==="manager"?autoAssignCard():""}
     ${(()=>{ const since=Date.now()-14*86400000, rows=[]; db.punches.filter(p=>p.in>=since&&p.geo).sort((a,b)=>b.in-a.in).forEach(p=>["in","out"].forEach(k=>{ const g=p.geo[k]; if(g&&!g.inside) rows.push(`<tr><td>${esc(userName(p.userId))}</td><td>${new Date(g.at).toLocaleString([],{weekday:"short",month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</td><td>Clock ${k}</td><td>${geoPill(g)}</td></tr>`); }));
       return `<div class="card" style="margin-top:14px"><h2>Clocked in or out away from the shop \u00b7 last 14 days</h2>${rows.length?`<div class="tablewrap"><table><thead><tr><th>Team member</th><th>When</th><th></th><th>Where &amp; reason</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`:'<div class="muted">Everyone clocked in and out at the shop.</div>'}<div class="hint">The shop area is about 200 ft around 3274 Palm Parkway.</div></div>`; })()}`;
+    if(me.role==="manager") bindAutoAssign();
     const au=$("#addUser"); if(au) au.onclick=()=>userModal(null);
     $("#view").querySelectorAll("[data-member]").forEach(r=>{ const go=e=>{ if(e.target.closest("button")) return; viewTeam.open=r.dataset.member; viewTeam(); window.scrollTo(0,0); }; r.onclick=go; r.onkeydown=e=>{ if(e.key==="Enter") go(e); }; });
     $("#view").querySelectorAll("[data-unlock]").forEach(b=>b.onclick=async()=>{ b.disabled=true;
@@ -5197,6 +5203,29 @@
     const g=jobGroups(j), v=Number(d.value||0);
     if(d.applies==="all"||!d.applies){ const base=Math.max(0,g.reduce((s,x)=>s+x.lab+x.par-x.disc,0)); return r2(Math.min(base, d.type==="%"?base*v/100:v)); }
     const x=g.find(x=>x.key===d.applies); if(!x) return 0; const base=x.lab+x.par; return r2(Math.min(base, d.type==="%"?base*v/100:v));
+  }
+  // ---- auto-assign: specialties a car needs (EV/diesel spotted from the car) and what each tech can do
+  const SKILLS=[["ev","Tesla / EV"],["diesel","Diesel"],["electrical","Electrical"],["diag","Diagnostics"],["trans","Transmission"],["ac","A/C"],["align","Alignment"]];
+  const woNeedsAuto=j=>{ const o=[]; if(/tesla|rivian|lucid|polestar/i.test(j.make||"")||/electric|\bev\b|battery/i.test(j.engine||"")||/leaf|bolt|ioniq 5|ioniq 6|mach-e|e-tron|taycan|lightning/i.test(j.model||"")) o.push("ev");
+    if(/diesel|\btdi\b|duramax|power ?stroke|cummins|ecodiesel|\bcrd\b/i.test(j.engine||"")) o.push("diesel"); return o; };
+  const skillsOf=id=>((db.skills||{})[id]||{}).skills||[];
+  const autoOn=id=>{ const r=(db.skills||{})[id]; return !r||r.auto!==false; };
+  function autoAssignCard(){
+    const techs=db.users.filter(worksOnCars), open=db.jobs.filter(j=>!j.isSample&&!j.done&&!["picked_up","completed","declined","cancelled"].includes(j.status));
+    const loadOf=id=>open.filter(j=>j.assignee===id).reduce((s,j)=>s+(j.labor||[]).reduce((a,l)=>a+(l[5]?0:Number(l[1])||0),0),0);
+    const unassigned=open.filter(j=>!j.assignee).length;
+    return `<div class="card" style="margin-top:14px"><div class="row" style="margin-bottom:6px"><h2 style="margin:0">Auto-assign</h2><span class="spacer"></span>${unassigned?`<button class="btn sm" id="aaNow" type="button">Assign ${unassigned} unassigned now</button>`:""}</div>
+      <div class="hint" style="margin:0 0 10px">New work orders go to the technician who's on the clock with the fewest open hours and the right specialty. Warranty comebacks go back to whoever did the original job. When a tech clocks out, cars they haven't started move to someone still on the clock. Tesla/EV and diesel are spotted from the car; tag other needs on the work order.</div>
+      <div class="aa-list">${techs.map(u=>{ const sk=skillsOf(u.id), on=autoOn(u.id); return `<div class="aa-row ${on?"":"off"}"><div class="aa-who"><b>${esc(u.name)}</b><div class="muted">${openPunch(u.id)?"On the clock":"Off the clock"} \u00b7 <span class="mono">${loadOf(u.id).toFixed(1)}</span> open hrs</div>
+          <label class="aa-tog"><input type="checkbox" data-aaon="${u.id}" ${on?"checked":""}> Gets new work</label></div>
+        <div class="crew">${SKILLS.map(([k,l])=>`<label class="crew-pick ${sk.includes(k)?"on":""}"><input type="checkbox" data-aask="${u.id}|${k}" ${sk.includes(k)?"checked":""}>${l}</label>`).join("")}</div></div>`; }).join("")||'<div class="muted">No repair technicians yet.</div>'}</div></div>`;
+  }
+  function bindAutoAssign(){
+    const put=async(id,patch)=>{ const cur=(db.skills||{})[id]||{user_id:id,skills:[],auto:true}; const row={user_id:id,skills:cur.skills||[],auto:cur.auto!==false,...patch,updated_at:new Date().toISOString(),updated_by:me.id};
+      db.skills=db.skills||{}; db.skills[id]=row; const {error}=await sb.from("tech_skills").upsert(row); if(error){ toast("Not saved: "+error.message); return; } viewTeam(); };
+    $("#view").querySelectorAll("[data-aaon]").forEach(c=>c.onchange=()=>put(c.dataset.aaon,{auto:c.checked}));
+    $("#view").querySelectorAll("[data-aask]").forEach(c=>c.onchange=()=>{ const [id,k]=c.dataset.aask.split("|"); const sk=new Set(skillsOf(id)); c.checked?sk.add(k):sk.delete(k); put(id,{skills:[...sk]}); });
+    const b=$("#aaNow"); if(b) b.onclick=async()=>{ b.disabled=true; const {data,error}=await sb.rpc("auto_assign_open"); if(error){ b.disabled=false; toast(error.message); return; } toast(`Assigned ${data} work order${data===1?"":"s"}`); catchUp&&catchUp(); };
   }
   const onCrew = (j,u) => j.assignee===u || (j.techs||[]).includes(u);
   const crewIds = j => [j.assignee,...(j.techs||[])].filter((x,i,a)=>x&&a.indexOf(x)===i);
@@ -6112,8 +6141,9 @@
 
           <div class="card tech-card" data-msec="jobs">
             <div class="card-head"><h2>Technicians</h2></div>
-            <div class="two" style="grid-template-columns:minmax(0,1fr)">              <div><label>Lead technician</label><select id="wTech"><option value="" ${!j.assignee?"selected":""}>Not assigned yet</option>${db.users.filter(u=>worksOnCars(u)||u.id===j.assignee).map(u=>`<option value="${u.id}" ${u.id===j.assignee?"selected":""}>${esc(u.name)}</option>`).join("")}</select></div>
+            <div class="two" style="grid-template-columns:minmax(0,1fr)">              <div><label>Lead technician</label><select id="wTech"><option value="" ${!j.assignee?"selected":""}>Pick automatically</option>${db.users.filter(u=>worksOnCars(u)||u.id===j.assignee).map(u=>`<option value="${u.id}" ${u.id===j.assignee?"selected":""}>${esc(u.name)}</option>`).join("")}</select></div>
             </div>
+            ${(()=>{ const auto=woNeedsAuto(j), nd=j.needs||[]; return `<label>Needs a specialist</label><div class="crew">${SKILLS.map(([k,l])=>auto.includes(k)?`<span class="crew-pick on" title="Spotted from the car">${l} \u00b7 auto</span>`:`<label class="crew-pick ${nd.includes(k)?"on":""}"><input type="checkbox" data-need="${k}" ${nd.includes(k)?"checked":""}>${l}</label>`).join("")}</div>${j.autoAssigned?`<div class="hint" style="margin:6px 0 10px">Assigned automatically${j.movedFrom?` (moved from ${esc(userName(j.movedFrom))} when they clocked out)`:""}. Pick someone else above to change it.</div>`:""}`; })()}
             <label>Also working on this job</label>
               <div class="crew">${db.users.filter(u=>u.id!==j.assignee&&(worksOnCars(u)||(j.techs||[]).includes(u.id))).map(u=>`<label class="crew-pick ${(j.techs||[]).includes(u.id)?"on":""}"><input type="checkbox" data-crew="${u.id}" ${(j.techs||[]).includes(u.id)?"checked":""}>${esc(u.name)}</label>`).join("")}</div>
           </div>
@@ -6166,7 +6196,7 @@
       j._costs=j._costs||{...((db.woCosts||{})[j.id]||{})};
       if(newCust){ j._cName=v("#cName")?.trim(); j._cPhone=v("#cPhone")?.trim(); j._cEmail=v("#cEmail")?.trim(); const ct=$("#cTextOk"); if(ct) j._cTextOk=ct.checked; }
       Object.assign(j,{year:v("#vYear").trim(),make:v("#vMake").trim(),model:v("#vModel").trim(),vin:v("#vVin").replace(/\s/g,"").toUpperCase(),mileage:$("#vMiles")?odoVal($("#vMiles")):undefined,engine:(v("#vEngine")||"").trim(),plate:(v("#vPlate")||"").trim().toUpperCase(),
-        title:v("#wTitle").trim(),status:v("#wStatus"),assignee:v("#wTech"),techs:[...$("#view").querySelectorAll("[data-crew]")].filter(e=>e.checked&&e.dataset.crew!==v("#wTech")).map(e=>e.dataset.crew),priority:v("#wPri"),date:v("#wDate")||todayStr(),time:v("#wTime")||"",
+        title:v("#wTitle").trim(),status:v("#wStatus"),assignee:v("#wTech"),needs:[...$("#view").querySelectorAll("[data-need]")].filter(e=>e.checked).map(e=>e.dataset.need),techs:[...$("#view").querySelectorAll("[data-crew]")].filter(e=>e.checked&&e.dataset.crew!==v("#wTech")).map(e=>e.dataset.crew),priority:v("#wPri"),date:v("#wDate")||todayStr(),time:v("#wTime")||"",
         notes:v("#wNotes").trim()});
       // match each box on screen to its line by the line's id, not its position: after a save drops an empty line
       // the positions shift, and matching by position wrote one line's boxes into another (wiping job names and hours)
