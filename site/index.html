@@ -540,6 +540,7 @@
   .wait-reasons{display:flex;flex-direction:column;gap:8px}.wait-reasons .btn{display:flex;flex-direction:column;align-items:center;gap:2px}.wait-reasons small{font-size:11.5px;font-weight:400;text-transform:none;letter-spacing:0;opacity:.75}
   .wait-why{display:flex;align-items:center;gap:8px;margin-top:8px}
   .kcol{background:var(--sub);min-height:max(520px,calc(100vh - 300px))}
+  .parts-sec{margin-top:14px}.count-chip{margin-left:10px;background:var(--sub);padding:2px 8px;font-family:'JetBrains Mono',monospace;font-size:12px}.parts-tbl td{vertical-align:top}.parts-tbl td.pact{text-align:right;white-space:nowrap}.parts-tbl .late{color:var(--accent2);font-weight:600}.linkish{background:none;border:0;padding:0;color:var(--ink);cursor:pointer;text-align:left;font:inherit}.linkish:hover b{text-decoration:underline}.pill.amber{background:#fff4d6;color:#7a5600}.pill.blue{background:#e6eefc;color:#1d4ea8}
   .aa-list{display:flex;flex-direction:column}.aa-row{display:grid;grid-template-columns:220px minmax(0,1fr);gap:12px;padding:12px 0;border-top:1px solid var(--hairline);align-items:start}.aa-row:first-child{border-top:0}.aa-row.off .crew{opacity:.45}.aa-who .muted{font-size:12px;margin-top:2px}.aa-tog{display:flex;align-items:center;gap:6px;margin:8px 0 0;text-transform:none;letter-spacing:0;font-size:13px;font-weight:500;color:var(--ink)}.aa-tog input{width:16px;height:16px;margin:0;accent-color:var(--red)}
   @media (max-width:700px){.aa-row{grid-template-columns:1fr}}
   .app-get{display:flex;flex-direction:column}.app-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-top:1px solid var(--hairline)}.app-row:first-child{border-top:0;padding-top:4px}.app-row .muted{font-size:12.5px;margin-top:2px}.app-row .btn{flex:none}
@@ -1274,7 +1275,7 @@
   }
   // team roles: each has an access level the database enforces (owner / gm / tech) plus switches set in Settings
   let ROLES_DB=[];
-  const PAGE_PERMS={gm:[["wip","Work orders"],["calendar","Calendar"],["board","Tech board"],["customers","Customers"],["inventory","Inventory"],["reports","Reports"],["clock","Time clock"],["training","Training"],["team","Team"],["settings","Settings"]],
+  const PAGE_PERMS={gm:[["wip","Work orders"],["calendar","Calendar"],["board","Tech board"],["customers","Customers"],["inventory","Inventory"],["parts","Parts"],["reports","Reports"],["clock","Time clock"],["training","Training"],["team","Team"],["settings","Settings"]],
     tech:[["jobs","My jobs"],["clock","Time clock"],["training","Training"]]};
   const ACT_PERMS={gm:[["create","Create new work orders"],["send","Send estimates and texts to customers"],["pay","Take payments and charge cards"],["qbo","Send invoices to QuickBooks"]],tech:[]};
   const roleById=id=>ROLES_DB.find(r=>r.id===id);
@@ -1975,6 +1976,7 @@
   document.querySelector(".side-logo img").addEventListener("click", ()=>{ if(!me) return; $("#app").classList.remove("nav-open"); show(me.role==="manager"?"wip":homeTab()); });
 
   const ICONS = {
+    parts:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
     wip:'<path d="M3 4h5v16H3zM10 4h5v10h-5zM17 4h4v13h-4z"/>',
     board:'<path d="M4 5h16M4 12h16M4 19h10"/><circle cx="19" cy="19" r="2"/>',
     customers:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18 14.6c2 .7 3.2 2.5 3.6 5.4"/>',
@@ -1994,7 +1996,7 @@
     earnings:'<rect x="2" y="6" width="20" height="13"/><circle cx="12" cy="12.5" r="3"/><path d="M6 9.5v6M18 9.5v6"/>'
   };
   const SHORT_TITLES = {wip:"In Progress",forsale:"For Sale",leads:"Leads",collision:"Collision",bodyjobs:"Body Jobs"};
-  const TITLES = {settings:"Settings",wip:"Work in Progress",calendar:"Calendar",board:"Tech Board",customers:"Customers",inventory:"Inventory",timesheets:"Timesheets",reports:"Reports",clock:"Time Clock",jobs:"My Jobs",training:"Training",logins:"Logins",collision:"Collision Board",bodyjobs:"My Body Jobs",forsale:"Cars for Sale",leads:"Website Leads",team:"Team",earnings:"Earnings"};
+  const TITLES = {settings:"Settings",wip:"Work in Progress",calendar:"Calendar",board:"Tech Board",customers:"Customers",inventory:"Inventory",parts:"Parts",timesheets:"Timesheets",reports:"Reports",clock:"Time Clock",jobs:"My Jobs",training:"Training",logins:"Logins",collision:"Collision Board",bodyjobs:"My Body Jobs",forsale:"Cars for Sale",leads:"Website Leads",team:"Team",earnings:"Earnings"};
   let chromeTick=null;
 
   const roleLabel=u=>{ const r=roleOfU(u); return r?r.name:u.dbRole==="owner"?"Owner":u.dbRole==="gm"?"Manager":"Technician"; };
@@ -2008,7 +2010,7 @@
     const mgr = me.role==="manager";
     TITLES.reports=me.finance?"Accounting":"Reports";
     const groups = (mgr
-      ? [["Shop",["wip","calendar","board","customers","inventory",...(me.finance?[]:["reports"])]],...(me.finance?[["Accounting",["reports"]]]:[]),["Collision",["collision"]],["Website",["forsale","leads"]],["Team",["team",...(me.dbRole==="owner"?[]:["clock"]),"training",...(me.finance?["logins"]:[])]]]
+      ? [["Shop",["wip","calendar","board","customers","parts","inventory",...(me.finance?[]:["reports"])]],...(me.finance?[["Accounting",["reports"]]]:[]),["Collision",["collision"]],["Website",["forsale","leads"]],["Team",["team",...(me.dbRole==="owner"?[]:["clock"]),"training",...(me.finance?["logins"]:[])]]]
       : [["My day",[shopWork(me)==="body"?"bodyjobs":"jobs","clock","training"]]]).map(([g,keys])=>[g,keys.filter(k=>k==="team"&&mgr||k==="logins"||canPage(k))]).filter(([g,keys])=>keys.length);
     $("#tabs").innerHTML = groups.map(([g,keys])=>`<div class="sect">${g}</div>`+keys.map(k=>
       `<button data-tab="${k}"><svg viewBox="0 0 24 24">${ICONS[k]}</svg><span>${TITLES[k]}</span>${k==="leads"?'<span class="count red hidden" id="leadCount"></span>':""}${k==="wip"?'<span class="count" id="wipCount"></span>':""}</button>`).join("")).join("");
@@ -2060,7 +2062,7 @@
     const [ ,a,b]=m;
     if(a==="wo"&&b){ const x=decodeURIComponent(b); const j=db.jobs.find(j=>String(j.number)===x||j.id===x); if(j&&me.role==="manager"){ openWO(j.id); return true; } return false; }
     const t=tabOfSlug(a);
-    const known=["wip","calendar","board","customers","inventory","reports","collision","forsale","leads","team","clock","training","logins","settings","timesheets","earnings","jobs","bodyjobs"];
+    const known=["wip","calendar","board","customers","inventory","parts","reports","collision","forsale","leads","team","clock","training","logins","settings","timesheets","earnings","jobs","bodyjobs"];
     if(!known.includes(t)) return false;
     if(me.role!=="manager"&&t!=="settings"&&!document.querySelector(`#tabs button[data-tab="${t}"]`)) return false;
     if(t==="reports"&&b&&REP_CATS.some(c=>c[0]===b)) viewReports.cat=b;
@@ -2084,7 +2086,7 @@
     document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on", b.dataset.tab===t||(b.dataset.tab==="team"&&(t==="timesheets"||t==="earnings"))));
     $("#pageTitle").textContent = (innerWidth<=480&&SHORT_TITLES[t])||TITLES[t]||"";
     document.querySelector(".topbar").classList.remove("search-open");
-    ({clock:viewClock,jobs:viewJobs,training:viewTraining,logins:viewLogins,collision:viewCollision,bodyjobs:viewBodyJobs,forsale:viewForSale,leads:viewLeads,board:viewBoard,timesheets:viewTimesheets,team:viewTeam,earnings:viewEarnings,wip:viewWip,customers:viewCustomers,inventory:viewInventory,reports:viewReports,calendar:viewCalendar,settings:viewSettings})[t]();
+    ({clock:viewClock,jobs:viewJobs,training:viewTraining,logins:viewLogins,collision:viewCollision,bodyjobs:viewBodyJobs,forsale:viewForSale,leads:viewLeads,board:viewBoard,timesheets:viewTimesheets,team:viewTeam,earnings:viewEarnings,wip:viewWip,customers:viewCustomers,inventory:viewInventory,parts:viewParts,reports:viewReports,calendar:viewCalendar,settings:viewSettings})[t]();
     updateChrome(); window.scrollTo(0,0); logAct("page",TITLES[t]||t);
     setRoute("#"+slugOf(t)+(t==="reports"&&viewReports.cat?"/"+viewReports.cat:""));
   }
@@ -5966,7 +5968,7 @@
     const partRow=(p,i)=>{ const inv=p.partId&&db.inventory.find(x=>x.id===p.partId), c=(j._costs||{})[p.lid];
       return `<div class="jrow ${p.declined?"declined":""} ${has(p.desc)?"":"blank"}">
         <div class="jdesc"><input data-p="${i}" data-f="desc" data-k="${p.lid}" value="${esc(p.desc)}" placeholder="Add a part\u2026">${has(p.desc)?X("data-dp",i):""}</div>
-        ${inv?`<div class="hint"><span class="mono">#${esc(inv.partNo)}</span> \u00b7 ${inv.qty} in stock now</div>`:""}${p.declined?'<div class="hint"><span class="pill red">Customer declined</span></div>':""}
+        ${inv?`<div class="hint"><span class="mono">#${esc(inv.partNo)}</span> \u00b7 ${inv.qty} in stock now</div>`:""}${p.declined?'<div class="hint"><span class="pill red">Customer declined</span></div>':""}${!p.declined&&has(p.desc)&&(p.status||p.supplier||p.partNo)?`<div class="hint">${partPill(p)}${p.partNo&&!inv?` <span class="mono">#${esc(p.partNo)}</span>`:""}${p.supplier?` \u00b7 ${esc(p.supplier)}`:""}${p.eta&&p.status!=="received"?` \u00b7 ETA ${esc(fmtEta(p.eta))}`:""}${p.quotedBy?` \u00b7 <span class="muted">priced by ${esc(p.quotedBy)}</span>`:""}</div>`:""}
         <div class="jnums ${canCost()?"c4":""}"><label>Qty<input data-p="${i}" data-f="qty" data-k="${p.lid}" inputmode="decimal" class="num" value="${p.qty}"></label>
           ${canCost()?`<label title="What the part cost us. Owners and the GM only.">Our cost<input data-p="${i}" data-f="cost" data-k="${p.lid}" inputmode="decimal" class="num cost-in" placeholder="\u2014" value="${c??""}"></label>`:""}
           <label>Price ea.<input data-p="${i}" data-f="price" data-k="${p.lid}" inputmode="decimal" class="num" placeholder="0.00" value="${Number(p.price)||has(p.desc)?p.price:""}"></label>
@@ -6886,6 +6888,72 @@
   }
 
   /* ----- Inventory ----- */
+  // ================= Parts: quote -> order -> arrive -> install, plus returns, cores and shelf reorders
+  const P_STAT=[["needed","To order"],["cart","In cart \u2013 confirm order"],["ordered","Ordered"],["backordered","Back-ordered"],["received","Here"],["installed","Installed"],["return","To return"],["returned","Returned"],["cancelled","Cancelled"]];
+  const pStat=p=>p.status||"needed";
+  const partPill=p=>{ const k=pStat(p), l=(P_STAT.find(x=>x[0]===k)||[k,k])[1]; const c={needed:"",cart:"amber",ordered:"blue",backordered:"red",received:"green",installed:"green",return:"amber",returned:"",cancelled:""}[k]||""; return `<span class="pill ${c}">${esc(l)}</span>`; };
+  const fmtEta=d=>{ try{ return new Date(String(d).length<=10?d+"T12:00":d).toLocaleDateString([],{weekday:"short",month:"short",day:"numeric"}); }catch(e){ return d; } };
+  const partsOpen=()=>db.jobs.filter(j=>!j.isSample&&!j.done&&!["picked_up","completed","declined","cancelled"].includes(j.status));
+  const woReady=j=>isOwnCar(j)||["approved","in_progress","waiting_parts"].includes(j.status);
+  const realPart=p=>String(p.desc||"").trim()&&!p.declined&&!p.partId;
+  function partsAfterChange(j){
+    const ps=(j.parts||[]).filter(realPart), live=ps.filter(p=>!["cancelled","returned","return"].includes(pStat(p)));
+    // ordering puts an approved car in Waiting (parts); when everything is here it goes back to work
+    if(live.some(p=>["ordered","backordered"].includes(pStat(p)))&&j.status==="approved"){ j.status="waiting_parts"; j.waitReason="parts"; }
+    else if(j.status==="waiting_parts"&&(j.waitReason||"parts")==="parts"&&live.length&&live.every(p=>["received","installed"].includes(pStat(p)))){ j.status="approved"; j.waitReason=null; toast(`All parts are here for #${j.number} \u2013 it's back in the work queue.`); }
+  }
+  function viewParts(){
+    const open=partsOpen(), q=(viewParts.q||"").toLowerCase();
+    const hit=(j,p)=>!q||[j.number,vehOf(j),(custOf(j)||{}).name,p&&p.desc,p&&p.partNo,p&&p.supplier].join(" ").toLowerCase().includes(q);
+    const rows=[]; open.forEach(j=>(j.parts||[]).forEach((p,i)=>{ if(realPart(p)&&hit(j,p)) rows.push({j,p,i}); }));
+    const needQuote=open.filter(j=>!j.noParts&&!["waiting_parts"].includes(j.status)&&(j.labor||[]).some(l=>String(l[0]||"").trim()&&!l[5])&&!(j.parts||[]).some(p=>String(p.desc||"").trim())&&hit(j));
+    const toOrder=rows.filter(r=>woReady(r.j)&&["needed","cart"].includes(pStat(r.p)));
+    const onOrder=rows.filter(r=>["ordered","backordered"].includes(pStat(r.p))).sort((a,b)=>String(a.p.eta||"9").localeCompare(String(b.p.eta||"9")));
+    const here=rows.filter(r=>pStat(r.p)==="received");
+    const returns=[]; db.jobs.filter(j=>!j.isSample&&(j.done?Date.now()-(j.completedAt||0)<60*86400000:true)).forEach(j=>(j.parts||[]).forEach((p,i)=>{ if(!String(p.desc||"").trim()) return;
+      if(pStat(p)==="return"||(Number(p.core)>0&&!p.coreBack&&["received","installed"].includes(pStat(p)))||(p.declined&&["ordered","received"].includes(pStat(p)))) if(hit(j,p)) returns.push({j,p,i}); }));
+    const low=db.inventory.filter(p=>p.min>0&&p.qty<=p.min&&(!q||[p.partNo,p.desc].join(" ").toLowerCase().includes(q)));
+    const car=j=>`<button class="linkish" data-pwo="${j.id}"><b>#${j.number||"\u2013"}</b> ${esc(vehOf(j)||j.title||"")}</button><div class="muted">${esc((custOf(j)||{}).name||"")}${j.promised?` \u00b7 promised ${esc(j.promised)}`:""}</div>`;
+    const partCell=p=>`<b>${esc(p.desc)}</b>${Number(p.qty)>1?` <span class="muted">\u00d7${p.qty}</span>`:""}<div class="muted">${p.partNo?`<span class="mono">#${esc(p.partNo)}</span>`:""}${p.supplier?` ${esc(p.supplier)}`:""}${p.orderNo?` \u00b7 order <span class="mono">${esc(p.orderNo)}</span>`:""}${p.note?` \u00b7 ${esc(p.note)}`:""}</div>`;
+    const btn=(k,l,r,cls="")=>`<button class="btn sm ${cls}" type="button" data-pact="${k}" data-pj="${r.j.id}" data-pi="${r.i}">${l}</button>`;
+    const sec=(title,n,body,empty,hint)=>`<div class="card parts-sec"><div class="row" style="margin-bottom:8px"><h2 style="margin:0">${title}</h2><span class="count-chip">${n}</span></div>${hint?`<div class="hint" style="margin:-2px 0 10px">${hint}</div>`:""}${n?body:`<div class="muted">${empty}</div>`}</div>`;
+    const tbl=(heads,trs)=>`<div class="tablewrap"><table class="parts-tbl"><thead><tr>${heads.map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody>${trs.join("")}</tbody></table></div>`;
+    $("#view").innerHTML=`
+      <div class="stats wip-stats" style="grid-template-columns:repeat(4,1fr)">
+        <div class="stat"><b>${needQuote.length}</b><span>Need pricing</span></div>
+        <div class="stat"><b style="color:${toOrder.length?"var(--accent2)":"inherit"}">${toOrder.length}</b><span>To order</span></div>
+        <div class="stat"><b>${onOrder.length}</b><span>On the way</span></div>
+        <div class="stat"><b>${returns.length+low.length}</b><span>Returns, cores &amp; restock</span></div></div>
+      <div class="row" style="margin:12px 0"><input id="pq" placeholder="Search parts, cars, suppliers\u2026" value="${esc(viewParts.q||"")}" style="max-width:420px"></div>
+      ${sec("To order",toOrder.length,tbl(["Car","Part","Price","",""],toOrder.map(r=>`<tr><td>${car(r.j)}</td><td>${partCell(r.p)}${pStat(r.p)==="cart"?`<div class="hint">${partPill(r.p)} ${r.p.cartAt?"since "+esc(new Date(r.p.cartAt).toLocaleString([],{weekday:"short",hour:"numeric",minute:"2-digit"})):""}</div>`:""}</td><td class="mono num">${money(r.p.price)}</td><td>${r.p.eta?`ETA ${esc(fmtEta(r.p.eta))}`:""}</td><td class="pact">${btn("order","Mark ordered",r)}</td></tr>`)),"Nothing to order. Parts on approved work orders show up here.","Parts on approved work orders and shop cars. When Claude has the cart ready at the best supplier it says \u201cIn cart\u201d \u2013 place the order there, then mark it ordered.")}
+      ${sec("On the way",onOrder.length,tbl(["Car","Part","Supplier","Arrives",""],onOrder.map(r=>{ const late=r.p.eta&&String(r.p.eta).slice(0,10)<todayStr(); return `<tr><td>${car(r.j)}</td><td>${partCell(r.p)}</td><td>${partPill(r.p)}</td><td class="${late?"late":""}">${r.p.eta?esc(fmtEta(r.p.eta))+(late?" \u00b7 late":""):"\u2013"}</td><td class="pact">${btn("here","Arrived",r)} ${btn("edit","Edit",r,"ghost")}</td></tr>`; })),"Nothing on order.")}
+      ${sec("Here \u2013 waiting to go on",here.length,tbl(["Car","Part","Tech",""],here.map(r=>`<tr><td>${car(r.j)}</td><td>${partCell(r.p)}</td><td>${esc(crewNames(r.j))}</td><td class="pact">${btn("installed","Installed",r,"ghost")} ${btn("return","Return it",r,"ghost")}</td></tr>`)),"No parts waiting on the shelf.")}
+      ${sec("Need pricing",needQuote.length,tbl(["Car","Jobs",""],needQuote.map(j=>`<tr><td>${car(j)}</td><td>${esc((j.labor||[]).filter(l=>String(l[0]||"").trim()&&!l[5]).map(l=>l[0]).join(", "))}</td><td class="pact"><button class="btn sm ghost" type="button" data-pnone="${j.id}">No parts needed</button></td></tr>`)),"Every estimate with jobs has parts on it.","Estimates with jobs but no parts yet. Claude prices these every hour during shop hours.")}
+      ${sec("Returns &amp; cores",returns.length,tbl(["Car","Part","Why",""],returns.map(r=>`<tr><td>${car(r.j)}</td><td>${partCell(r.p)}</td><td>${pStat(r.p)==="return"?`Return${r.p.returnBy?` by ${esc(fmtEta(r.p.returnBy))}`:""}`:r.p.declined?"Customer declined":`Core ${money(r.p.core)}`}</td><td class="pact">${pStat(r.p)==="return"||r.p.declined?btn("returned","Returned",r):btn("coreback","Core returned",r)}</td></tr>`)),"No returns or cores due.")}
+      ${sec("Restock shelf parts",low.length,tbl(["Part","Location","On hand","Reorder at",""],low.map(p=>`<tr><td><b>${esc(p.desc)}</b><div class="muted mono">#${esc(p.partNo)}</div></td><td>${esc(p.location||"\u2013")}</td><td class="num mono">${p.qty}</td><td class="num mono">${p.min}</td><td class="pact">${p.reorderedAt&&Date.now()-p.reorderedAt<10*86400000?`<span class="pill blue">Ordered ${esc(new Date(p.reorderedAt).toLocaleDateString([],{month:"short",day:"numeric"}))}</span>`:`<button class="btn sm ghost" type="button" data-preo="${p.id}">Mark ordered</button>`}</td></tr>`)),"Shelf stock is above its reorder level.")}`;
+    const pq=$("#pq"); pq.oninput=()=>{ viewParts.q=pq.value; clearTimeout(viewParts.t); viewParts.t=setTimeout(()=>{ viewParts(); const n=$("#pq"); n.focus(); n.setSelectionRange(n.value.length,n.value.length); },250); };
+    $("#view").querySelectorAll("[data-pwo]").forEach(b=>b.onclick=()=>{ openWO.from="parts"; openWO(b.dataset.pwo); });
+    $("#view").querySelectorAll("[data-pnone]").forEach(b=>b.onclick=()=>{ const j=db.jobs.find(x=>x.id===b.dataset.pnone); if(!j) return; j.noParts=true; queuePush(); viewParts(); });
+    $("#view").querySelectorAll("[data-preo]").forEach(b=>b.onclick=()=>{ const p=db.inventory.find(x=>x.id===b.dataset.preo); if(!p) return; p.reorderedAt=Date.now(); queuePush(); viewParts(); });
+    $("#view").querySelectorAll("[data-pact]").forEach(b=>b.onclick=()=>{ const j=db.jobs.find(x=>x.id===b.dataset.pj); if(!j) return; const p=(j.parts||[])[+b.dataset.pi]; if(!p) return; const a=b.dataset.pact;
+      const done=()=>{ p.statusAt=Date.now(); p.statusBy=me.id; partsAfterChange(j); queuePush(); viewParts(); };
+      if(a==="here"){ p.status="received"; p.receivedAt=Date.now(); return done(); }
+      if(a==="installed"){ p.status="installed"; return done(); }
+      if(a==="returned"){ p.status="returned"; return done(); }
+      if(a==="coreback"){ p.coreBack=Date.now(); return done(); }
+      if(a==="return"){ p.status="return"; return done(); }
+      // order / edit: supplier, order number, arrival date, core charge
+      modal(`<h2>${a==="order"?"Mark ordered":"Edit order"}</h2><p class="muted">${esc(p.desc)} \u00b7 #${j.number} ${esc(vehOf(j))}</p>
+        <div class="two"><div><label>Supplier</label><input id="poSup" list="poSups" value="${esc(p.supplier||"")}" placeholder="O'Reilly, AutoZone, RockAuto\u2026"><datalist id="poSups">${["O'Reilly","AutoZone","NAPA","RockAuto","Amazon","eBay","Dealer","Tesla"].map(x=>`<option value="${x}">`).join("")}</datalist></div>
+          <div><label>Order / invoice #</label><input id="poNo" value="${esc(p.orderNo||"")}"></div></div>
+        <div class="two"><div><label>Arrives</label><input id="poEta" type="date" value="${esc(String(p.eta||todayStr()).slice(0,10))}"></div>
+          <div><label>Core charge</label><input id="poCore" inputmode="decimal" class="mono" value="${p.core||""}" placeholder="0.00"></div></div>
+        ${a==="edit"?`<label class="aa-tog"><input type="checkbox" id="poBack" ${pStat(p)==="backordered"?"checked":""}> Back-ordered</label>`:""}
+        <div class="row end" style="margin-top:12px"><button class="btn ghost" data-close type="button">Cancel</button><button class="btn" id="poOk" type="button">Save</button></div>`, root=>{
+        root.querySelector("#poOk").onclick=()=>{ p.supplier=root.querySelector("#poSup").value.trim(); p.orderNo=root.querySelector("#poNo").value.trim(); p.eta=root.querySelector("#poEta").value; p.core=Number(root.querySelector("#poCore").value)||0;
+          const bk=root.querySelector("#poBack"); p.status=bk&&bk.checked?"backordered":"ordered"; if(a==="order") p.orderedAt=Date.now(); closeModal(); done(); }; }); });
+  }
+
   function viewInventory(){
     const q=(viewInventory.q||"").toLowerCase(), low=viewInventory.low;
     const items=db.inventory.filter(p=>(!q||[p.partNo,p.desc,p.location,p.vendor].join(" ").toLowerCase().includes(q)) && (!low||(p.min>0&&p.qty<=p.min)))
